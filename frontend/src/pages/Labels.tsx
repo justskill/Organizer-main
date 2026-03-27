@@ -73,7 +73,8 @@ async function fetchSheetPdf(
   entities: LabelEntity[],
   startCell: number,
   labelTemplate: string = "avery5260",
-  textScale: number = 1.0
+  textScale: number = 1.0,
+  footerText: string = "",
 ): Promise<string> {
   const res = await fetch(`${API_BASE}/labels/generate-sheet`, {
     method: "POST",
@@ -86,6 +87,7 @@ async function fetchSheetPdf(
       start_cell: startCell,
       label_template: labelTemplate,
       text_scale: textScale,
+      footer_text: footerText,
     }),
   })
   if (!res.ok) {
@@ -147,6 +149,8 @@ const LABEL_TEMPLATES = {
 
 type SheetTemplate = keyof typeof LABEL_TEMPLATES
 
+type TextSize = "xs" | "small" | "normal" | "large" | "xl"
+
 // ---------------------------------------------------------------------------
 // Single Label Preview (visual mock of what the printed label looks like)
 // ---------------------------------------------------------------------------
@@ -155,10 +159,12 @@ function SingleLabelPreview({
   entity,
   template,
   textSize,
+  footerText,
 }: {
   entity: LabelEntity
   template: SheetTemplate
-  textSize: "small" | "normal" | "large"
+  textSize: TextSize
+  footerText?: string
 }) {
   const isItem = entity.entityType === "item"
   const Icon = isItem ? Package : MapPin
@@ -169,7 +175,7 @@ function SingleLabelPreview({
   const previewH = isLarge ? 80 : isTiny ? 36 : 48
   const previewW = isLarge ? 160 : isTiny ? 100 : 126
   const qrSize = isLarge ? 56 : isTiny ? 24 : 32
-  const textSizeMap = { small: 0.85, normal: 1, large: 1.15 }
+  const textSizeMap: Record<TextSize, number> = { xs: 0.7, small: 0.85, normal: 1, large: 1.2, xl: 1.45 }
   const scale = textSizeMap[textSize]
   const baseFontLg = isLarge ? 9 : isTiny ? 4.5 : 6
   const baseFontMd = isLarge ? 11 : isTiny ? 5 : 7
@@ -177,7 +183,7 @@ function SingleLabelPreview({
 
   return (
     <div
-      className="rounded border bg-white dark:bg-zinc-900 p-2 flex items-center gap-2"
+      className="relative rounded border bg-white dark:bg-zinc-900 p-2 flex items-center gap-2"
       style={{ width: previewW, height: previewH }}
     >
       <div
@@ -211,6 +217,14 @@ function SingleLabelPreview({
           {entity.code}
         </p>
       </div>
+      {footerText && (
+        <span
+          className="absolute bottom-1 right-1.5 text-muted-foreground truncate"
+          style={{ fontSize: `${(isTiny ? 3.5 : isLarge ? 7 : 5) * scale}px`, maxWidth: previewW * 0.55 }}
+        >
+          {footerText}
+        </span>
+      )}
     </div>
   )
 }
@@ -228,7 +242,7 @@ function SheetPreview({
   entities: LabelEntity[]
   template: SheetTemplate
   startCell: number
-  textSize: "small" | "normal" | "large"
+  textSize: TextSize
 }) {
   const tmpl = LABEL_TEMPLATES[template]
   const cells: (LabelEntity | null)[] = []
@@ -422,7 +436,8 @@ export default function Labels() {
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set())
   const [labelFormat, setLabelFormat] = useState<"adhesive" | "sheet" | "avery5260" | "avery18163" | "avery18294">("avery5260")
   const [startCell, setStartCell] = useState(1)
-  const [textSize, setTextSize] = useState<"small" | "normal" | "large">("normal")
+  const [textSize, setTextSize] = useState<TextSize>("normal")
+  const [footerText] = useState(() => localStorage.getItem("label_footer_text") ?? "")
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successCount, setSuccessCount] = useState<number | null>(null)
@@ -541,8 +556,8 @@ export default function Labels() {
 
     try {
       if (labelFormat === "avery5260" || labelFormat === "avery18163" || labelFormat === "avery18294") {
-        const textScaleMap = { small: 0.8, normal: 1.0, large: 1.3 }
-        const url = await fetchSheetPdf(allSelected, startCell, labelFormat, textScaleMap[textSize])
+        const textScaleMap: Record<TextSize, number> = { xs: 0.6, small: 0.8, normal: 1.0, large: 1.3, xl: 1.6 }
+        const url = await fetchSheetPdf(allSelected, startCell, labelFormat, textScaleMap[textSize], footerText)
         setPdfUrl(url)
         openPdfPreview(url)
         setSuccessCount(allSelected.length)
@@ -576,7 +591,7 @@ export default function Labels() {
     } finally {
       setGenerating(false)
     }
-  }, [allSelected, labelFormat, startCell, textSize, pdfUrl])
+  }, [allSelected, labelFormat, startCell, textSize, pdfUrl, footerText])
 
   const handleDownload = useCallback(() => {
     if (!pdfUrl) return
@@ -691,13 +706,15 @@ export default function Labels() {
                     <label className="text-sm font-medium">Text Size</label>
                     <Select
                       value={textSize}
-                      onChange={(e) => setTextSize(e.target.value as "small" | "normal" | "large")}
+                      onChange={(e) => setTextSize(e.target.value as TextSize)}
                       className="mt-1 min-h-[44px]"
                       aria-label="Text size"
                     >
+                      <option value="xs">Extra Small</option>
                       <option value="small">Small</option>
                       <option value="normal">Normal</option>
                       <option value="large">Large</option>
+                      <option value="xl">Extra Large</option>
                     </Select>
                   </div>
                   <div>
@@ -812,6 +829,7 @@ export default function Labels() {
                     entity={allSelected[0]}
                     template={labelFormat as SheetTemplate}
                     textSize={textSize}
+                    footerText={footerText}
                   />
                 </div>
 
@@ -842,6 +860,7 @@ export default function Labels() {
                       entity={entity}
                       template="avery5260"
                       textSize="normal"
+                      footerText={footerText}
                     />
                   ))}
                 </div>

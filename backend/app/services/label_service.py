@@ -42,7 +42,7 @@ AVERY5260_LEFT_MARGIN = 0.1875 * inch  # 3/16"
 AVERY5260_COL_GAP = 0.125 * inch  # 1/8" horizontal gutter
 
 
-def _draw_avery5260_label(c: canvas.Canvas, x: float, y: float, entity_type: str, name: str, short_code: str, qr_payload: str, text_scale: float = 1.0):
+def _draw_avery5260_label(c: canvas.Canvas, x: float, y: float, entity_type: str, name: str, short_code: str, qr_payload: str, text_scale: float = 1.0, footer_text: str = ""):
     """Draw a single label at position (x, y) = bottom-left of label cell."""
     qr_bytes = generate_qr_code(qr_payload, box_size=6)
     qr_img = ImageReader(io.BytesIO(qr_bytes))
@@ -75,8 +75,15 @@ def _draw_avery5260_label(c: canvas.Canvas, x: float, y: float, entity_type: str
     c.setFont("Courier", code_size)
     c.drawString(text_x, y + AVERY5260_LABEL_H - 36, short_code)
 
+    # Footer text (bottom-right)
+    if footer_text:
+        footer_size = 5 * text_scale
+        c.setFont("Helvetica", footer_size)
+        fw = c.stringWidth(footer_text, "Helvetica", footer_size)
+        c.drawString(x + AVERY5260_LABEL_W - fw - 3, y + 3, footer_text)
 
-def render_avery5260_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0) -> bytes:
+
+def render_avery5260_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0, footer_text: str = "") -> bytes:
     """Render labels onto Avery 5260 sheet(s).
 
     labels: list of {entity_type, name, short_code, qr_payload}
@@ -110,6 +117,7 @@ def render_avery5260_sheet(labels: list[dict], start_cell: int = 1, text_scale: 
             short_code=lbl["short_code"],
             qr_payload=lbl["qr_payload"],
             text_scale=text_scale,
+            footer_text=footer_text,
         )
 
         cell_idx += 1
@@ -136,7 +144,7 @@ AVERY18163_COL_GAP = 0.18 * inch
 def _draw_avery18163_label(
     c: canvas.Canvas, x: float, y: float,
     entity_type: str, name: str, short_code: str, qr_payload: str,
-    text_scale: float = 1.0,
+    text_scale: float = 1.0, footer_text: str = "",
 ):
     """Draw a single Avery 18163 label at position (x, y) = bottom-left."""
     qr_bytes = generate_qr_code(qr_payload, box_size=8)
@@ -170,8 +178,15 @@ def _draw_avery18163_label(
     c.setFont("Courier", code_size)
     c.drawString(text_x, y + AVERY18163_LABEL_H - 58, short_code)
 
+    # Footer text (bottom-right)
+    if footer_text:
+        footer_size = 7 * text_scale
+        c.setFont("Helvetica", footer_size)
+        fw = c.stringWidth(footer_text, "Helvetica", footer_size)
+        c.drawString(x + AVERY18163_LABEL_W - fw - 6, y + 6, footer_text)
 
-def render_avery18163_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0) -> bytes:
+
+def render_avery18163_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0, footer_text: str = "") -> bytes:
     """Render labels onto Avery 18163 sheet(s).
 
     labels: list of {entity_type, name, short_code, qr_payload}
@@ -203,6 +218,7 @@ def render_avery18163_sheet(labels: list[dict], start_cell: int = 1, text_scale:
             short_code=lbl["short_code"],
             qr_payload=lbl["qr_payload"],
             text_scale=text_scale,
+            footer_text=footer_text,
         )
 
         cell_idx += 1
@@ -229,7 +245,7 @@ AVERY18294_COL_GAP = 0.3125 * inch
 def _draw_avery18294_label(
     c: canvas.Canvas, x: float, y: float,
     entity_type: str, name: str, short_code: str, qr_payload: str,
-    text_scale: float = 1.0,
+    text_scale: float = 1.0, footer_text: str = "",
 ):
     """Draw a single Avery 18294 label at position (x, y) = bottom-left."""
     qr_bytes = generate_qr_code(qr_payload, box_size=4)
@@ -258,8 +274,15 @@ def _draw_avery18294_label(
     c.setFont("Courier", code_size)
     c.drawString(text_x, y + AVERY18294_LABEL_H - 20, short_code)
 
+    # Footer text (bottom-right) — very small on tiny labels
+    if footer_text:
+        footer_size = 3.5 * text_scale
+        c.setFont("Helvetica", footer_size)
+        fw = c.stringWidth(footer_text, "Helvetica", footer_size)
+        c.drawString(x + AVERY18294_LABEL_W - fw - 2, y + 2, footer_text)
 
-def render_avery18294_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0) -> bytes:
+
+def render_avery18294_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0, footer_text: str = "") -> bytes:
     """Render labels onto Avery 18294 sheet(s).
 
     labels: list of {entity_type, name, short_code, qr_payload}
@@ -291,6 +314,7 @@ def render_avery18294_sheet(labels: list[dict], start_cell: int = 1, text_scale:
             short_code=lbl["short_code"],
             qr_payload=lbl["qr_payload"],
             text_scale=text_scale,
+            footer_text=footer_text,
         )
 
         cell_idx += 1

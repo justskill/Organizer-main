@@ -29,8 +29,9 @@ class BatchLabelEntity(BaseModel):
 class BatchLabelRequest(BaseModel):
     entities: list[BatchLabelEntity]
     start_cell: int = Field(1, ge=1, le=30, description="1-based cell to start at")
-    label_template: str = Field("avery5260", description="'avery5260' or 'avery18163'")
+    label_template: str = Field("avery5260", description="'avery5260', 'avery18163', or 'avery18294'")
     text_scale: float = Field(1.0, ge=0.5, le=2.0, description="Text size multiplier (0.5–2.0)")
+    footer_text: str = Field("", max_length=60, description="Optional text shown at bottom-right of each label")
 
 
 class ScanResponse(BaseModel):
@@ -127,14 +128,17 @@ async def generate_avery5260_sheet(
     if template == "avery18163":
         pdf_bytes = label_service.render_avery18163_sheet(
             labels, start_cell=body.start_cell, text_scale=body.text_scale,
+            footer_text=body.footer_text,
         )
     elif template == "avery18294":
         pdf_bytes = label_service.render_avery18294_sheet(
             labels, start_cell=body.start_cell, text_scale=body.text_scale,
+            footer_text=body.footer_text,
         )
     else:
         pdf_bytes = label_service.render_avery5260_sheet(
             labels, start_cell=body.start_cell, text_scale=body.text_scale,
+            footer_text=body.footer_text,
         )
 
     # Record label generation for each

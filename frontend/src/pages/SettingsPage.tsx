@@ -15,6 +15,7 @@ import {
   Copy,
   Check,
   X,
+  Tag,
 } from "lucide-react"
 import { apiFetch } from "@/api/client"
 import { Button } from "@/components/ui/button"
@@ -1150,7 +1151,83 @@ function PreferencesTab() {
 // Main Settings Page
 // ---------------------------------------------------------------------------
 
-export default function SettingsPage() {
+export default // ---------------------------------------------------------------------------
+// Labels Tab — label footer text stored in localStorage
+// ---------------------------------------------------------------------------
+
+function LabelsTab() {
+  const [footerText, setFooterText] = useState(() =>
+    localStorage.getItem("label_footer_text") ?? ""
+  )
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = () => {
+    localStorage.setItem("label_footer_text", footerText)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleClear = () => {
+    setFooterText("")
+    localStorage.removeItem("label_footer_text")
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold">Label Settings</h3>
+        <p className="text-sm text-muted-foreground">
+          Configure defaults for printed labels.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Footer Text</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="label-footer-text">Common text on all labels</Label>
+            <Input
+              id="label-footer-text"
+              placeholder='e.g. "Property of Acme Corp"'
+              value={footerText}
+              onChange={(e) => setFooterText(e.target.value)}
+              maxLength={60}
+            />
+            <p className="text-xs text-muted-foreground">
+              This text appears at the bottom-right of every printed label. Leave blank to disable.
+            </p>
+          </div>
+
+          {saved && (
+            <div className="flex items-start gap-2 rounded-md border border-green-500/50 bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
+              <Check className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>Saved.</span>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button onClick={handleSave}>Save</Button>
+            {footerText && (
+              <Button variant="outline" onClick={handleClear}>
+                Clear
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main Settings Page
+// ---------------------------------------------------------------------------
+
+function SettingsPage() {
   const [tab, setTab] = useState("categories")
 
   return (
@@ -1189,6 +1266,11 @@ export default function SettingsPage() {
             <span className="hidden sm:inline">Preferences</span>
             <span className="sm:hidden">Prefs</span>
           </TabsTrigger>
+          <TabsTrigger value="labels" className="flex-1 min-h-[44px]">
+            <Tag className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Labels</span>
+            <span className="sm:hidden">Labels</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="categories">
@@ -1205,6 +1287,9 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="preferences">
           <PreferencesTab />
+        </TabsContent>
+        <TabsContent value="labels">
+          <LabelsTab />
         </TabsContent>
       </Tabs>
     </div>
