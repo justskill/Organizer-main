@@ -106,6 +106,8 @@ async def update_location(
         event_type="updated",
         event_data={"before": _serialize(before), "after": _serialize(update_data)},
     )
+    # Re-fetch to ensure all relationships and server-side defaults are fresh
+    location = await location_repository.get_by_id(db, location.id)
     return location
 
 

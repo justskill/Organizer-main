@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { MoveItemsDialog } from "@/components/MoveItemsDialog"
+import { MoveLocationDialog } from "@/components/MoveLocationDialog"
 import type { LocationContents, ItemBrief } from "@/types"
 
 // ---------------------------------------------------------------------------
@@ -273,9 +274,10 @@ function EntitySummary({
   onClear: () => void
 }) {
   const navigate = useNavigate()
-  const [moveOpen, setMoveOpen] = useState(false)
   const isItem = result.entity_type === "item"
   const isLocation = result.entity_type === "location"
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [moveLocationOpen, setMoveLocationOpen] = useState(false)
 
   const detailPath = isItem
     ? `/items/${result.entity_id}`
@@ -363,6 +365,21 @@ function EntitySummary({
                 <ExternalLink className="mr-1.5 h-4 w-4" />
                 Open Full Record
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[44px]"
+                onClick={() => setMoveLocationOpen(true)}
+              >
+                <FolderInput className="mr-1.5 h-4 w-4" />
+                Move
+              </Button>
+              <MoveLocationDialog
+                open={moveLocationOpen}
+                onOpenChange={setMoveLocationOpen}
+                locationId={result.entity_id}
+                locationName={result.name}
+              />
               <Button variant="outline" size="sm" className="min-h-[44px]" disabled>
                 <QrCode className="mr-1.5 h-4 w-4" />
                 Reprint Label

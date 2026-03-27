@@ -1,45 +1,73 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
-import { useCreateLocation, useLocations } from "@/hooks/useLocations"
+import { useCreateLocation, useUpdateLocation, useLocation, useLocations } from "@/hooks/useLocations"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function LocationForm() {
+  const { id } = useParams<{ id: string }>()
+  const isEdit = Boolean(id)
   const navigate = useNavigate()
   const createLocation = useCreateLocation()
+  const updateLocation = useUpdateLocation(id ?? "")
+  const { data: existing, isLoading: loadingExisting } = useLocation(isEdit ? id : undefined)
   const { data } = useLocations({ rootOnly: false })
-  const allLocations = data?.locations ?? []
+  const allLocations = (data?.locations ?? []).filter((l) => l.id !== id)
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [parentId, setParentId] = useState("")
   const [locationType, setLocationType] = useState("")
   const [notes, setNotes] = useState("")
+  const [seeded, setSeeded] = useState(false)
+
+  useEffect(() => {
+    if (isEdit && existing && !seeded) {
+      setName(existing.name)
+      setDescription(existing.description ?? "")
+      setParentId(existing.parent_location_id ?? "")
+      setLocationType(existing.location_type ?? "")
+      setNotes(existing.notes ?? "")
+      setSeeded(true)
+    }
+  }, [isEdit, existing, seeded])
+
+  const isPending = createLocation.isPending || updateLocation.isPending
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
-    createLocation.mutate(
-      {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        parent_location_id: parentId || undefined,
-        location_type: locationType.trim() || undefined,
-        notes: notes.trim() || undefined,
-      },
-      { onSuccess: (loc) => navigate(`/locations/${loc.id}`) }
-    )
+    const payload = {
+      name: name.trim(),
+      description: description.trim() || undefined,
+      parent_location_id: parentId || undefined,
+      location_type: locationType.trim() || undefined,
+      notes: notes.trim() || undefined,
+    }
+    if (isEdit) {
+      updateLocation.mutate(payload, {
+        onSuccess: (loc) => navigate(`/locations/${loc.id}`),
+      })
+    } else {
+      createLocation.mutate(payload, {
+        onSuccess: (loc) => navigate(`/locations/${loc.id}`),
+      })
+    }
+  }
+
+  if (isEdit && loadingExisting) {
+    return <div className="flex items-center justify-center py-12 text-muted-foreground">Loading...</div>
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/locations")} aria-label="Back">
+        <Button variant="ghost" size="icon" onClick={() => navigate(isEdit ? `/locations/${id}` : "/locations")} aria-label="Back">
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-bold tracking-tight">New Location</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{isEdit ? "Edit Location" : "New Location"}</h1>
       </div>
 
       <Card>
@@ -74,10 +102,10 @@ export default function LocationForm() {
               <textarea id="loc-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" rows={3} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
             <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={!name.trim() || createLocation.isPending}>
-                {createLocation.isPending ? "Creating..." : "Create Location"}
+              <Button type="submit" disabled={!name.trim() || isPending}>
+                {isPending ? (isEdit ? "Saving..." : "Creating...") : (isEdit ? "Save Changes" : "Create Location")}
               </Button>
-              <Button type="button" variant="outline" onClick={() => navigate("/locations")}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => navigate(isEdit ? `/locations/${id}` : "/locations")}>Cancel</Button>
             </div>
           </form>
         </CardContent>

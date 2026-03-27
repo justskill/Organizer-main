@@ -5,6 +5,7 @@ import {
   ChevronDown,
   MapPin,
   Package,
+  FolderInput,
   FolderOpen,
   Tag,
   StickyNote,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react"
 import { useLocations, useLocationContents } from "@/hooks/useLocations"
 import { useTags } from "@/hooks/useTags"
+import { MoveLocationDialog } from "@/components/MoveLocationDialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -131,6 +133,7 @@ function LocationBreadcrumb({ pathText }: { pathText: string | null }) {
 
 function ContentsPanel({ locationId }: { locationId: string }) {
   const { data, isLoading, isError } = useLocationContents(locationId)
+  const [moveOpen, setMoveOpen] = useState(false)
 
   if (isLoading) {
     return (
@@ -169,6 +172,15 @@ function ContentsPanel({ locationId }: { locationId: string }) {
           <Button variant="outline" size="sm" asChild>
             <Link to={`/locations/${location.id}`}>View Details</Link>
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setMoveOpen(true)}>
+            <FolderInput className="mr-1.5 h-4 w-4" /> Move
+          </Button>
+          <MoveLocationDialog
+            open={moveOpen}
+            onOpenChange={setMoveOpen}
+            locationId={location.id}
+            locationName={location.name}
+          />
         </div>
       </div>
 

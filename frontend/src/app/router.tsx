@@ -51,6 +51,7 @@ export const router = createBrowserRouter([
           { path: "locations", element: <LazyPage><Locations /></LazyPage> },
           { path: "locations/new", element: <LazyPage><LocationForm /></LazyPage> },
           { path: "locations/:id", element: <LazyPage><LocationDetailPage /></LazyPage> },
+          { path: "locations/:id/edit", element: <LazyPage><LocationForm /></LazyPage> },
           { path: "scan", element: <LazyPage><Scan /></LazyPage> },
           { path: "labels", element: <LazyPage><Labels /></LazyPage> },
           { path: "settings", element: <LazyPage><SettingsPage /></LazyPage> },

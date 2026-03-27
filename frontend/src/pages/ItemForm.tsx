@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import ReviewPanel, { applyClassificationToForm } from "@/components/ReviewPanel"
+import { CameraCapture } from "@/components/CameraCapture"
 import type { ItemType, ItemCondition } from "@/types"
 
 const ITEM_TYPES: ItemType[] = [
@@ -107,6 +108,7 @@ export default function ItemForm() {
   const [classifying, setClassifying] = useState(false)
   const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null)
   const [classificationResult, setClassificationResult] = useState<ClassificationResult | null>(null)
+  const [savePhotosToItem, setSavePhotosToItem] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Check classification settings on mount (only for new items)
@@ -223,6 +225,20 @@ export default function ItemForm() {
     }
   }
 
+  const uploadClassificationPhotos = async (itemId: string) => {
+    if (!savePhotosToItem || selectedImages.length === 0) return
+    const token = localStorage.getItem("auth_token")
+    const headers: Record<string, string> = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+    for (const file of selectedImages) {
+      const fd = new globalThis.FormData()
+      fd.append("file", file)
+      fd.append("owner_type", "item")
+      fd.append("owner_id", itemId)
+      await fetch("/api/v1/media/upload", { method: "POST", headers, body: fd })
+    }
+  }
+
   const syncCategories = async (itemId: string) => {
     const existing = existingItem?.categories?.map((c) => c.id) ?? []
     const toAdd = form.category_ids.filter((id) => !existing.includes(id))
@@ -259,6 +275,7 @@ export default function ItemForm() {
       createItem.mutate(payload, {
         onSuccess: async (data) => {
           await syncCategories(data.item.id)
+          await uploadClassificationPhotos(data.item.id)
           navigate(`/items/${data.item.id}`)
         },
       })
@@ -407,15 +424,21 @@ export default function ItemForm() {
                   onClick={(e) => { (e.target as HTMLInputElement).value = "" }}
                 />
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={apiKeyConfigured !== true || classifying}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <ImagePlus className="mr-1.5 h-4 w-4" />
-                  {selectedImages.length > 0 ? "Add More Photos" : "Classify from Photos"}
-                </Button>
+                <div className="flex flex-wrap gap-2 items-start">
+                  <CameraCapture
+                    disabled={apiKeyConfigured !== true || classifying}
+                    onCapture={(file) => setSelectedImages((prev) => [...prev, file])}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={apiKeyConfigured !== true || classifying}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <ImagePlus className="mr-1.5 h-4 w-4" />
+                    {selectedImages.length > 0 ? "Add More" : "Choose Photos"}
+                  </Button>
+                </div>
 
                 {/* Thumbnail previews */}
                 {selectedImages.length > 0 && (
@@ -469,7 +492,13 @@ export default function ItemForm() {
                       setForm((prev) => applyClassificationToForm(prev, acceptedFields))
                       setClassificationResult(null)
                     }}
-                    onDiscard={() => setClassificationResult(null)}
+                    onDiscard={() => {
+                      setClassificationResult(null)
+                      setSavePhotosToItem(false)
+                    }}
+                    showSavePhotos={selectedImages.length > 0}
+                    savePhotos={savePhotosToItem}
+                    onSavePhotosChange={setSavePhotosToItem}
                   />
                 )}
               </div>

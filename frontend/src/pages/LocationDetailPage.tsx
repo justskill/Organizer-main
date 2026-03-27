@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom"
 import {
   ArrowLeft,
   Edit,
+  FolderInput,
   FolderPlus,
   QrCode,
   MapPin,
@@ -12,6 +13,7 @@ import {
   StickyNote,
 } from "lucide-react"
 import { useLocation, useLocationContents } from "@/hooks/useLocations"
+import { MoveLocationDialog } from "@/components/MoveLocationDialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -79,6 +81,7 @@ export default function LocationDetailPage() {
   const { data: location, isLoading, isError } = useLocation(id)
   const { data: contents, isLoading: contentsLoading } = useLocationContents(id)
   const [labelGenerating, setLabelGenerating] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
 
   if (isLoading) {
     return (
@@ -136,9 +139,18 @@ export default function LocationDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" disabled>
-            <Edit className="mr-1.5 h-4 w-4" /> Edit
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/locations/${location.id}/edit`}><Edit className="mr-1.5 h-4 w-4" /> Edit</Link>
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setMoveOpen(true)}>
+            <FolderInput className="mr-1.5 h-4 w-4" /> Move
+          </Button>
+          <MoveLocationDialog
+            open={moveOpen}
+            onOpenChange={setMoveOpen}
+            locationId={location.id}
+            locationName={location.name}
+          />
           <Button variant="outline" size="sm" disabled>
             <FolderPlus className="mr-1.5 h-4 w-4" /> Add Child Location
           </Button>
