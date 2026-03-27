@@ -134,6 +134,15 @@ const LABEL_TEMPLATES = {
     rows: 5,
     maxCells: 10,
   },
+  avery18294: {
+    name: 'Avery 18294',
+    description: '⅔" × 1¾", 60/sheet (4×15)',
+    labelW: 1.75,
+    labelH: 0.667,
+    cols: 4,
+    rows: 15,
+    maxCells: 60,
+  },
 } as const
 
 type SheetTemplate = keyof typeof LABEL_TEMPLATES
@@ -155,12 +164,16 @@ function SingleLabelPreview({
   const Icon = isItem ? Package : MapPin
 
   // Scale factor for the visual preview box
+  const isTiny = template === "avery18294"
   const isLarge = template === "avery18163"
-  const previewH = isLarge ? 80 : 48
-  const previewW = isLarge ? 160 : 126
-  const qrSize = isLarge ? 56 : 32
+  const previewH = isLarge ? 80 : isTiny ? 36 : 48
+  const previewW = isLarge ? 160 : isTiny ? 100 : 126
+  const qrSize = isLarge ? 56 : isTiny ? 24 : 32
   const textSizeMap = { small: 0.85, normal: 1, large: 1.15 }
   const scale = textSizeMap[textSize]
+  const baseFontLg = isLarge ? 9 : isTiny ? 4.5 : 6
+  const baseFontMd = isLarge ? 11 : isTiny ? 5 : 7
+  const baseFontSm = isLarge ? 10 : isTiny ? 5 : 7
 
   return (
     <div
@@ -174,24 +187,26 @@ function SingleLabelPreview({
         <QrCode className="text-muted-foreground" style={{ width: qrSize * 0.6, height: qrSize * 0.6 }} />
       </div>
       <div className="min-w-0 flex-1 overflow-hidden">
-        <div className="flex items-center gap-1">
-          <Icon className="shrink-0 text-muted-foreground" style={{ width: 10 * scale, height: 10 * scale }} />
-          <span
-            className="font-bold uppercase text-muted-foreground truncate"
-            style={{ fontSize: `${(isLarge ? 9 : 6) * scale}px`, lineHeight: 1.2 }}
-          >
-            {entity.entityType}
-          </span>
-        </div>
+        {!isTiny && (
+          <div className="flex items-center gap-1">
+            <Icon className="shrink-0 text-muted-foreground" style={{ width: 10 * scale, height: 10 * scale }} />
+            <span
+              className="font-bold uppercase text-muted-foreground truncate"
+              style={{ fontSize: `${baseFontLg * scale}px`, lineHeight: 1.2 }}
+            >
+              {entity.entityType}
+            </span>
+          </div>
+        )}
         <p
           className="truncate font-medium"
-          style={{ fontSize: `${(isLarge ? 11 : 7) * scale}px`, lineHeight: 1.3 }}
+          style={{ fontSize: `${baseFontMd * scale}px`, lineHeight: 1.3 }}
         >
           {entity.name}
         </p>
         <p
           className="truncate font-mono text-muted-foreground"
-          style={{ fontSize: `${(isLarge ? 10 : 7) * scale}px`, lineHeight: 1.3 }}
+          style={{ fontSize: `${baseFontSm * scale}px`, lineHeight: 1.3 }}
         >
           {entity.code}
         </p>
@@ -245,7 +260,7 @@ function SheetPreview({
           className="grid gap-px mx-auto"
           style={{
             gridTemplateColumns: `repeat(${tmpl.cols}, 1fr)`,
-            maxWidth: tmpl.cols === 2 ? 340 : 400,
+            maxWidth: tmpl.cols === 2 ? 340 : tmpl.cols === 4 ? 420 : 400,
           }}
         >
           {cells.map((entity, idx) => (
@@ -256,15 +271,15 @@ function SheetPreview({
               }`}
               style={{
                 aspectRatio: `${tmpl.labelW} / ${tmpl.labelH}`,
-                minHeight: template === "avery18163" ? 50 : 30,
+                minHeight: template === "avery18163" ? 50 : template === "avery18294" ? 18 : 30,
               }}
             >
               {entity ? (
                 <div className="w-full h-full flex items-center gap-1 px-1 overflow-hidden">
-                  <QrCode className="shrink-0 text-muted-foreground" style={{ width: 14, height: 14 }} />
+                  <QrCode className="shrink-0 text-muted-foreground" style={{ width: template === "avery18294" ? 10 : 14, height: template === "avery18294" ? 10 : 14 }} />
                   <span
                     className="truncate text-foreground"
-                    style={{ fontSize: `${template === "avery18163" ? 9 : 7}px` }}
+                    style={{ fontSize: `${template === "avery18163" ? 9 : template === "avery18294" ? 6 : 7}px` }}
                   >
                     {entity.name}
                   </span>
@@ -405,7 +420,7 @@ export default function Labels() {
   const [locationSearch, setLocationSearch] = useState("")
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set())
-  const [labelFormat, setLabelFormat] = useState<"adhesive" | "sheet" | "avery5260" | "avery18163">("avery5260")
+  const [labelFormat, setLabelFormat] = useState<"adhesive" | "sheet" | "avery5260" | "avery18163" | "avery18294">("avery5260")
   const [startCell, setStartCell] = useState(1)
   const [textSize, setTextSize] = useState<"small" | "normal" | "large">("normal")
   const [generating, setGenerating] = useState(false)
@@ -525,7 +540,7 @@ export default function Labels() {
     }
 
     try {
-      if (labelFormat === "avery5260" || labelFormat === "avery18163") {
+      if (labelFormat === "avery5260" || labelFormat === "avery18163" || labelFormat === "avery18294") {
         const textScaleMap = { small: 0.8, normal: 1.0, large: 1.3 }
         const url = await fetchSheetPdf(allSelected, startCell, labelFormat, textScaleMap[textSize])
         setPdfUrl(url)
@@ -566,7 +581,7 @@ export default function Labels() {
   const handleDownload = useCallback(() => {
     if (!pdfUrl) return
     const filename =
-      labelFormat === "avery5260" || labelFormat === "avery18163"
+      labelFormat === "avery5260" || labelFormat === "avery18163" || labelFormat === "avery18294"
         ? `labels-${labelFormat}.pdf`
         : `label.pdf`
     downloadBlobUrl(pdfUrl, filename)
@@ -665,11 +680,12 @@ export default function Labels() {
               >
                 <option value="avery5260">Avery 5260 (1" × 2⅝", 30/sheet)</option>
                 <option value="avery18163">Avery 18163 (2" × 4", 10/sheet)</option>
+                <option value="avery18294">Avery 18294 (⅔" × 1¾", 60/sheet)</option>
                 <option value="adhesive">Adhesive (single small label)</option>
                 <option value="sheet">Sheet (full page, single label)</option>
               </Select>
 
-              {(labelFormat === "avery5260" || labelFormat === "avery18163") && (
+              {(labelFormat === "avery5260" || labelFormat === "avery18163" || labelFormat === "avery18294") && (
                 <>
                   <div>
                     <label className="text-sm font-medium">Text Size</label>
@@ -693,23 +709,23 @@ export default function Labels() {
                       <Input
                         type="number"
                         min={1}
-                        max={labelFormat === "avery18163" ? 10 : 30}
+                        max={LABEL_TEMPLATES[labelFormat as SheetTemplate]?.maxCells ?? 30}
                         value={startCell}
                         onChange={(e) => {
-                          const max = labelFormat === "avery18163" ? 10 : 30
+                          const max = LABEL_TEMPLATES[labelFormat as SheetTemplate]?.maxCells ?? 30
                           setStartCell(Math.max(1, Math.min(max, Number(e.target.value) || 1)))
                         }}
                         className="w-20 h-10"
                       />
                       <span className="text-sm text-muted-foreground">
-                        of {labelFormat === "avery18163" ? 10 : 30}
+                        of {LABEL_TEMPLATES[labelFormat as SheetTemplate]?.maxCells ?? 30}
                       </span>
                     </div>
                     {allSelected.length > 0 && (
                       <p className="text-xs text-muted-foreground mt-1">
                         {allSelected.length} label{allSelected.length !== 1 ? "s" : ""} starting at cell {startCell}
                         {(() => {
-                          const max = labelFormat === "avery18163" ? 10 : 30
+                          const max = LABEL_TEMPLATES[labelFormat as SheetTemplate]?.maxCells ?? 30
                           return allSelected.length + startCell - 1 > max
                             ? ` (${Math.ceil((allSelected.length + startCell - 1) / max)} pages)`
                             : ""
@@ -781,7 +797,7 @@ export default function Labels() {
           </Card>
 
           {/* Label Preview */}
-          {allSelected.length > 0 && (labelFormat === "avery5260" || labelFormat === "avery18163") && (
+          {allSelected.length > 0 && (labelFormat === "avery5260" || labelFormat === "avery18163" || labelFormat === "avery18294") && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
@@ -811,7 +827,7 @@ export default function Labels() {
           )}
 
           {/* Simple list preview for non-sheet formats */}
-          {allSelected.length > 0 && labelFormat !== "avery5260" && labelFormat !== "avery18163" && (
+          {allSelected.length > 0 && labelFormat !== "avery5260" && labelFormat !== "avery18163" && labelFormat !== "avery18294" && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">

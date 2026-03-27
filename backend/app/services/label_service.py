@@ -213,6 +213,94 @@ def render_avery18163_sheet(labels: list[dict], start_cell: int = 1, text_scale:
     return buf.getvalue()
 
 
+# ---------------------------------------------------------------------------
+# Avery 18294 layout constants (2/3" x 1-3/4", 60 labels, 4x15 on US Letter)
+# ---------------------------------------------------------------------------
+AVERY18294_PAGE_W, AVERY18294_PAGE_H = letter
+AVERY18294_LABEL_W = 1.75 * inch
+AVERY18294_LABEL_H = (2.0 / 3.0) * inch
+AVERY18294_COLS = 4
+AVERY18294_ROWS = 15
+AVERY18294_TOP_MARGIN = 0.5 * inch
+AVERY18294_LEFT_MARGIN = 0.3 * inch
+AVERY18294_COL_GAP = 0.3125 * inch
+
+
+def _draw_avery18294_label(
+    c: canvas.Canvas, x: float, y: float,
+    entity_type: str, name: str, short_code: str, qr_payload: str,
+    text_scale: float = 1.0,
+):
+    """Draw a single Avery 18294 label at position (x, y) = bottom-left."""
+    qr_bytes = generate_qr_code(qr_payload, box_size=4)
+    qr_img = ImageReader(io.BytesIO(qr_bytes))
+
+    padding = 2
+    qr_size = AVERY18294_LABEL_H - 2 * padding
+
+    # QR code on the left
+    c.drawImage(qr_img, x + padding, y + padding, width=qr_size, height=qr_size)
+
+    # Text to the right of QR
+    text_x = x + padding + qr_size + 3
+    text_max_w = AVERY18294_LABEL_W - qr_size - padding * 2 - 6
+
+    # Name (truncate to fit) — skip entity type to save space on tiny labels
+    name_size = 5 * text_scale
+    c.setFont("Helvetica", name_size)
+    display_name = name
+    while c.stringWidth(display_name, "Helvetica", name_size) > text_max_w and len(display_name) > 3:
+        display_name = display_name[:-4] + "..."
+    c.drawString(text_x, y + AVERY18294_LABEL_H - 10, display_name)
+
+    # Short code
+    code_size = 5 * text_scale
+    c.setFont("Courier", code_size)
+    c.drawString(text_x, y + AVERY18294_LABEL_H - 20, short_code)
+
+
+def render_avery18294_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0) -> bytes:
+    """Render labels onto Avery 18294 sheet(s).
+
+    labels: list of {entity_type, name, short_code, qr_payload}
+    start_cell: 1-based cell number to start at (1-60), skipping earlier cells.
+    text_scale: multiplier for text size.
+    """
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(AVERY18294_PAGE_W, AVERY18294_PAGE_H))
+
+    cell_idx = start_cell - 1
+    label_idx = 0
+
+    while label_idx < len(labels):
+        if cell_idx >= AVERY18294_COLS * AVERY18294_ROWS:
+            c.showPage()
+            cell_idx = 0
+
+        row = cell_idx // AVERY18294_COLS
+        col = cell_idx % AVERY18294_COLS
+
+        x = AVERY18294_LEFT_MARGIN + col * (AVERY18294_LABEL_W + AVERY18294_COL_GAP)
+        y = AVERY18294_PAGE_H - AVERY18294_TOP_MARGIN - (row + 1) * AVERY18294_LABEL_H
+
+        lbl = labels[label_idx]
+        _draw_avery18294_label(
+            c, x, y,
+            entity_type=lbl["entity_type"],
+            name=lbl["name"],
+            short_code=lbl["short_code"],
+            qr_payload=lbl["qr_payload"],
+            text_scale=text_scale,
+        )
+
+        cell_idx += 1
+        label_idx += 1
+
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 def render_label_pdf(
     entity_type: str,
     name: str,

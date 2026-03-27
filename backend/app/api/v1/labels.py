@@ -128,6 +128,10 @@ async def generate_avery5260_sheet(
         pdf_bytes = label_service.render_avery18163_sheet(
             labels, start_cell=body.start_cell, text_scale=body.text_scale,
         )
+    elif template == "avery18294":
+        pdf_bytes = label_service.render_avery18294_sheet(
+            labels, start_cell=body.start_cell, text_scale=body.text_scale,
+        )
     else:
         pdf_bytes = label_service.render_avery5260_sheet(
             labels, start_cell=body.start_cell, text_scale=body.text_scale,
