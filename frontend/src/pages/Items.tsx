@@ -132,7 +132,8 @@ function applyClientFilters(items: ItemResponse[], filters: Filters): ItemRespon
   if (filters.location) {
     const q = filters.location.toLowerCase()
     result = result.filter((i) =>
-      i.current_placement?.location_name?.toLowerCase().includes(q)
+      i.current_placement?.location_name?.toLowerCase().includes(q) ||
+      i.current_placement?.container_name?.toLowerCase().includes(q)
     )
   }
 
@@ -249,9 +250,10 @@ function buildColumns(
     {
       id: "location",
       header: "Location",
-      accessorFn: (row) => row.current_placement?.location_name ?? "",
+      accessorFn: (row) => row.current_placement?.location_name ?? row.current_placement?.container_name ?? "",
       cell: ({ row }) => {
-        const loc = row.original.current_placement?.location_name
+        const p = row.original.current_placement
+        const loc = p?.location_name || p?.container_name
         return loc ? (
           <span className="text-sm">{loc}</span>
         ) : (
@@ -639,9 +641,9 @@ function ItemGridCard({
             <Badge variant="outline" className="text-xs">
               {item.item_type.replace("_", " ")}
             </Badge>
-            {item.current_placement?.location_name && (
+            {(item.current_placement?.location_name || item.current_placement?.container_name) && (
               <Badge variant="secondary" className="text-xs">
-                {item.current_placement.location_name}
+                {item.current_placement.location_name || item.current_placement.container_name}
               </Badge>
             )}
           </div>

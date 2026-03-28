@@ -80,7 +80,6 @@ export default function LocationDetailPage() {
   const navigate = useNavigate()
   const { data: location, isLoading, isError } = useLocation(id)
   const { data: contents, isLoading: contentsLoading } = useLocationContents(id)
-  const [labelGenerating, setLabelGenerating] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
 
   if (isLoading) {
@@ -157,19 +156,9 @@ export default function LocationDetailPage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={labelGenerating}
-            onClick={async () => {
-              setLabelGenerating(true)
-              try {
-                await downloadLabelPdf("location", location.id, "adhesive", location.code)
-              } catch {
-                // silent
-              } finally {
-                setLabelGenerating(false)
-              }
-            }}
+            onClick={() => navigate(`/labels?select=location:${location.id}`)}
           >
-            <QrCode className="mr-1.5 h-4 w-4" /> {labelGenerating ? "Generating..." : "Generate Label"}
+            <QrCode className="mr-1.5 h-4 w-4" /> Generate Label
           </Button>
         </div>
       </div>
@@ -324,20 +313,10 @@ export default function LocationDetailPage() {
                     variant="outline"
                     size="sm"
                     className="mt-2 min-h-[36px]"
-                    disabled={labelGenerating}
-                    onClick={async () => {
-                      setLabelGenerating(true)
-                      try {
-                        await downloadLabelPdf("location", location.id, "adhesive", location.code)
-                      } catch {
-                        // silent
-                      } finally {
-                        setLabelGenerating(false)
-                      }
-                    }}
+                    onClick={() => navigate(`/labels?select=location:${location.id}`)}
                   >
                     <QrCode className="mr-1.5 h-4 w-4" />
-                    {labelGenerating ? "Generating..." : "Download Label"}
+                    Generate Label
                   </Button>
                 </div>
               </div>

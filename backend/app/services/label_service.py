@@ -387,6 +387,7 @@ async def resolve_code(db: AsyncSession, code: str) -> dict | None:
             "name": item.name,
             "code": item.code,
             "archived": item.archived_at is not None,
+            "is_container": item.is_container,
         }
 
     # Try location

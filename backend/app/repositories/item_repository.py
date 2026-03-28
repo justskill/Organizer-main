@@ -125,6 +125,22 @@ async def find_duplicates(
 
 # --- Placement helpers ---
 
+async def get_contained_items(db: AsyncSession, container_id: uuid.UUID) -> list[Item]:
+    """Return items currently placed inside a container item."""
+    result = await db.execute(
+        select(Item)
+        .join(ItemPlacement, ItemPlacement.item_id == Item.id)
+        .where(
+            ItemPlacement.parent_item_id == container_id,
+            ItemPlacement.removed_at.is_(None),
+            Item.archived_at.is_(None),
+        )
+        .options(selectinload(Item.tags), selectinload(Item.media), selectinload(Item.categories))
+        .order_by(Item.name)
+    )
+    return list(result.scalars().all())
+
+
 async def get_current_placement(db: AsyncSession, item_id: uuid.UUID) -> ItemPlacement | None:
     result = await db.execute(
         select(ItemPlacement)

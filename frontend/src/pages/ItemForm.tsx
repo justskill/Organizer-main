@@ -151,7 +151,14 @@ export default function ItemForm() {
   }, [existingItem, isEdit])
 
   const set = (field: keyof FormData, value: string | boolean) =>
-    setForm((prev) => ({ ...prev, [field]: value }))
+    setForm((prev) => {
+      const next = { ...prev, [field]: value }
+      // Auto-sync: selecting type "Container" forces is_container on
+      if (field === "item_type" && value === "Container") {
+        next.is_container = true
+      }
+      return next
+    })
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {}

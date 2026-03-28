@@ -40,6 +40,7 @@ class ScanResponse(BaseModel):
     name: str
     code: str
     archived: bool = False
+    is_container: bool | None = None
 
 
 @router.post("/labels/generate")

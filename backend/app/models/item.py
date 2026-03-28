@@ -114,3 +114,6 @@ def _normalize_name(name: str | None) -> str | None:
 @event.listens_for(Item, "before_update")
 def _set_normalized_name(mapper, connection, target):
     target.normalized_name = _normalize_name(target.name)
+    # Auto-sync: item_type Container always implies is_container
+    if target.item_type == ItemType.Container:
+        target.is_container = True

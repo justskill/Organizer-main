@@ -2,6 +2,22 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "@/api/client"
 import type { ItemResponse } from "@/types"
 
+export interface ContainerItemBrief {
+  id: string
+  code: string
+  name: string
+  item_type: string
+  is_container: boolean
+}
+
+export function useContainerContents(itemId: string | undefined, isContainer: boolean) {
+  return useQuery<ContainerItemBrief[]>({
+    queryKey: ["container-contents", itemId],
+    queryFn: () => apiFetch<ContainerItemBrief[]>(`/items/${itemId}/contents`),
+    enabled: !!itemId && isContainer,
+  })
+}
+
 export function useItem(id: string | undefined) {
   return useQuery<ItemResponse>({
     queryKey: ["item", id],

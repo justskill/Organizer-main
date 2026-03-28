@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -154,6 +155,39 @@ async def get_item(
     return await _build_item_response(db, item)
 
 
+class ContainerItemBrief(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    item_type: str
+    is_container: bool = False
+
+
+@router.get("/{item_id}/contents", response_model=list[ContainerItemBrief])
+async def get_container_contents(
+    item_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List items currently placed inside a container item."""
+    item = await inventory_service.get_item(db, item_id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+    if not item.is_container:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Item is not a container")
+    items = await item_repository.get_contained_items(db, item_id)
+    return [
+        ContainerItemBrief(
+            id=i.id,
+            code=i.code,
+            name=i.name,
+            item_type=i.item_type.value if hasattr(i.item_type, "value") else i.item_type,
+            is_container=i.is_container,
+        )
+        for i in items
+    ]
+
+
 @router.patch("/{item_id}", response_model=ItemResponse)
 async def update_item(
     item_id: UUID,
@@ -185,8 +219,6 @@ async def delete_item(
 # ---------------------------------------------------------------------------
 # Movement
 # ---------------------------------------------------------------------------
-
-from pydantic import BaseModel
 
 
 class MoveItemRequest(BaseModel):

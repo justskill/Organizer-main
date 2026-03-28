@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Search, Camera, MapPin, Loader2 } from "lucide-react"
+import { Search, Camera, MapPin, Package, Loader2 } from "lucide-react"
 import { apiFetch } from "@/api/client"
 import { useLocations } from "@/hooks/useLocations"
+import { useSearch } from "@/hooks/useSearch"
 import {
   Dialog,
   DialogContent,
@@ -23,35 +24,93 @@ interface MoveItemsDialogProps {
   onSuccess?: () => void
 }
 
+/** A unified destination entry — either a location or a container item. */
+interface Destination {
+  id: string
+  kind: "location" | "container"
+  name: string
+  code: string
+  subtitle: string | null
+}
+
 export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: MoveItemsDialogProps) {
   const [mode, setMode] = useState<"search" | "scan">("search")
   const [search, setSearch] = useState("")
-  const [selectedId, setSelectedId] = useState("")
-  const [selectedName, setSelectedName] = useState("")
+  const [selected, setSelected] = useState<Destination | null>(null)
   const [note, setNote] = useState("")
   const [scanError, setScanError] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
 
-  const { data } = useLocations({ rootOnly: false })
-  const allLocations = data?.locations ?? []
+  const { data: locData } = useLocations({ rootOnly: false })
+  const { data: searchData } = useSearch(search.trim())
   const qc = useQueryClient()
 
-  const filtered = search.trim()
-    ? allLocations.filter(
-        (l) =>
-          l.name.toLowerCase().includes(search.toLowerCase()) ||
-          l.code.toLowerCase().includes(search.toLowerCase()) ||
-          (l.path_text && l.path_text.toLowerCase().includes(search.toLowerCase()))
-      )
-    : allLocations
+  const movingSet = useMemo(() => new Set(itemIds), [itemIds])
+
+  // When user hasn't typed enough for search, show all locations as defaults.
+  // When search is active, merge locations + containers from search results.
+  const destinations = useMemo<Destination[]>(() => {
+    if (search.trim().length < 2) {
+      // No active search — show locations only (they're typically fewer)
+      return (locData?.locations ?? []).map((l) => ({
+        id: l.id,
+        kind: "location" as const,
+        name: l.name,
+        code: l.code,
+        subtitle: l.path_text ?? null,
+      }))
+    }
+
+    // Active search — use server-side search results
+    const locs: Destination[] = (searchData?.locations ?? []).map((l) => ({
+      id: l.id,
+      kind: "location",
+      name: l.name,
+      code: l.code,
+      subtitle: l.path_text ?? null,
+    }))
+
+    const containers: Destination[] = (searchData?.containers ?? [])
+      .filter((c) => !movingSet.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        kind: "container",
+        name: c.name,
+        code: c.code,
+        subtitle: c.brand || null,
+      }))
+
+    return [...locs, ...containers]
+  }, [search, locData, searchData, movingSet])
+
+  // For the pre-search state, do client-side filtering on locations
+  const filtered = useMemo(() => {
+    if (search.trim().length >= 2) {
+      // Already server-filtered
+      return destinations
+    }
+    if (!search.trim()) return destinations
+    // 1 character typed — client-filter locations
+    return destinations.filter(
+      (d) =>
+        d.name.toLowerCase().includes(search.toLowerCase()) ||
+        d.code.toLowerCase().includes(search.toLowerCase()) ||
+        (d.subtitle && d.subtitle.toLowerCase().includes(search.toLowerCase()))
+    )
+  }, [search, destinations])
 
   const mutation = useMutation({
-    mutationFn: async (targetLocationId: string) => {
+    mutationFn: async (dest: Destination) => {
+      const body =
+        dest.kind === "location"
+          ? { location_id: dest.id, note: note.trim() || undefined }
+          : { container_id: dest.id, note: note.trim() || undefined }
+
       const results = await Promise.allSettled(
         itemIds.map((id) =>
           apiFetch(`/items/${id}/move`, {
             method: "POST",
-            body: JSON.stringify({ location_id: targetLocationId, note: note.trim() || undefined }),
+            body: JSON.stringify(body),
           })
         )
       )
@@ -69,9 +128,8 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
     },
   })
 
-  const handleSelect = (loc: { id: string; name: string; path_text?: string | null }) => {
-    setSelectedId(loc.id)
-    setSelectedName(loc.path_text || loc.name)
+  const handleSelect = (dest: Destination) => {
+    setSelected(dest)
     setSearch("")
     setScanError(null)
   }
@@ -86,21 +144,44 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
         name: string
         code: string
         archived: boolean
+        is_container?: boolean
       }>(`/scan/${encodeURIComponent(code)}`)
 
-      if (result.entity_type !== "location") {
-        setScanError(`Scanned code is a ${result.entity_type}, not a location.`)
-        setResolving(false)
-        return
-      }
       if (result.archived) {
-        setScanError("This location is archived.")
+        setScanError("This entity is archived.")
         setResolving(false)
         return
       }
-      const match = allLocations.find((l) => l.id === result.entity_id)
-      setSelectedId(result.entity_id)
-      setSelectedName(match?.path_text || match?.name || result.name)
+
+      if (result.entity_type === "location") {
+        setSelected({
+          id: result.entity_id,
+          kind: "location",
+          name: result.name,
+          code: result.code,
+          subtitle: null,
+        })
+      } else if (result.entity_type === "item") {
+        if (!result.is_container) {
+          setScanError("Scanned item is not a container.")
+          setResolving(false)
+          return
+        }
+        if (movingSet.has(result.entity_id)) {
+          setScanError("Cannot move an item into itself.")
+          setResolving(false)
+          return
+        }
+        setSelected({
+          id: result.entity_id,
+          kind: "container",
+          name: result.name,
+          code: result.code,
+          subtitle: null,
+        })
+      } else {
+        setScanError(`Scanned code is a ${result.entity_type}, not a location or container.`)
+      }
     } catch {
       setScanError("Could not resolve scanned code. Try again or search manually.")
     }
@@ -108,19 +189,17 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
   }
 
   const handleSubmit = () => {
-    if (!selectedId) return
-    mutation.mutate(selectedId)
+    if (!selected) return
+    mutation.mutate(selected)
   }
 
   const handleClear = () => {
-    setSelectedId("")
-    setSelectedName("")
+    setSelected(null)
     setScanError(null)
   }
 
   const resetState = () => {
-    setSelectedId("")
-    setSelectedName("")
+    setSelected(null)
     setSearch("")
     setNote("")
     setScanError(null)
@@ -135,19 +214,32 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
 
   const itemLabel = itemIds.length === 1 ? "item" : "items"
 
+  const DestIcon = ({ kind }: { kind: "location" | "container" }) =>
+    kind === "location" ? (
+      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+    ) : (
+      <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+    )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Move {itemIds.length} {itemLabel}</DialogTitle>
-          <DialogDescription>Choose a destination location.</DialogDescription>
+          <DialogDescription>Choose a destination location or container.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          {/* Location selected — show confirmation chip */}
-          {selectedId ? (
+          {/* Destination selected — show confirmation chip */}
+          {selected ? (
             <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
-              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-sm flex-1 truncate">{selectedName}</span>
+              <DestIcon kind={selected.kind} />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm truncate block">{selected.name}</span>
+                {selected.subtitle && (
+                  <span className="text-xs text-muted-foreground truncate block">{selected.subtitle}</span>
+                )}
+              </div>
+              <span className="text-xs text-muted-foreground shrink-0 capitalize">{selected.kind}</span>
               <button
                 onClick={handleClear}
                 className="text-xs text-muted-foreground hover:text-foreground"
@@ -185,7 +277,7 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
 
               {mode === "search" ? (
                 <div>
-                  <Label>Search locations</Label>
+                  <Label>Search locations &amp; containers</Label>
                   <Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -194,26 +286,26 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
                   />
                   {filtered.length > 0 && (
                     <div className="mt-1 max-h-48 overflow-y-auto rounded-md border">
-                      {filtered.slice(0, 20).map((loc) => (
+                      {filtered.slice(0, 30).map((dest) => (
                         <button
-                          key={loc.id}
-                          onClick={() => handleSelect(loc)}
+                          key={`${dest.kind}-${dest.id}`}
+                          onClick={() => handleSelect(dest)}
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted min-h-[44px]"
                         >
-                          <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <DestIcon kind={dest.kind} />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium">{loc.name}</p>
-                            {loc.path_text && (
-                              <p className="truncate text-xs text-muted-foreground">{loc.path_text}</p>
+                            <p className="truncate font-medium">{dest.name}</p>
+                            {dest.subtitle && (
+                              <p className="truncate text-xs text-muted-foreground">{dest.subtitle}</p>
                             )}
                           </div>
-                          <span className="text-xs text-muted-foreground shrink-0">{loc.code}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">{dest.code}</span>
                         </button>
                       ))}
                     </div>
                   )}
                   {search.trim() && filtered.length === 0 && (
-                    <p className="mt-1 text-xs text-muted-foreground">No locations found.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">No locations or containers found.</p>
                   )}
                 </div>
               ) : (
@@ -221,7 +313,7 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
                   {resolving ? (
                     <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Resolving location...
+                      Resolving...
                     </div>
                   ) : (
                     <QrScanner onScan={handleQrScan} />
@@ -240,7 +332,7 @@ export function MoveItemsDialog({ open, onOpenChange, itemIds, onSuccess }: Move
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={!selectedId || mutation.isPending}>
+          <Button onClick={handleSubmit} disabled={!selected || mutation.isPending}>
             {mutation.isPending ? "Moving..." : "Move"}
           </Button>
         </DialogFooter>

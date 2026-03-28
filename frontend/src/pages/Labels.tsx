@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
+import { useSearchParams } from "react-router-dom"
 import {
   QrCode,
   Package,
@@ -9,6 +10,7 @@ import {
   Download,
   AlertCircle,
   Eye,
+  ScanLine,
 } from "lucide-react"
 import { useItems } from "@/hooks/useItems"
 import { useLocations } from "@/hooks/useLocations"
@@ -20,6 +22,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Select } from "@/components/ui/select"
+import { QrScanner } from "@/components/QrScanner"
+import { apiFetch } from "@/api/client"
 import type { ItemResponse, LocationResponse } from "@/types"
 
 // ---------------------------------------------------------------------------
@@ -31,6 +35,14 @@ interface LabelEntity {
   code: string
   name: string
   entityType: "item" | "location"
+}
+
+interface ScanResult {
+  entity_type: string
+  entity_id: string
+  name: string
+  code: string
+  archived: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -442,10 +454,30 @@ export default function Labels() {
   const [error, setError] = useState<string | null>(null)
   const [successCount, setSuccessCount] = useState<number | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [scanStatus, setScanStatus] = useState<{ message: string; isError: boolean } | null>(null)
 
   // Fetch data
   const { data: itemsData, isLoading: itemsLoading } = useItems({ pageSize: 200 })
   const { data: locationsData, isLoading: locationsLoading } = useLocations({ pageSize: 200 })
+
+  // Pre-select entity from URL query param (e.g. ?select=item:uuid)
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const selectParam = searchParams.get("select")
+    if (!selectParam) return
+    const [type, id] = selectParam.split(":")
+    if (!type || !id) return
+    if (type === "item") {
+      setSelectedItems((prev) => new Set(prev).add(id))
+      setTab("items")
+    } else if (type === "location") {
+      setSelectedLocations((prev) => new Set(prev).add(id))
+      setTab("locations")
+    }
+    // Clear the param so refreshing doesn't re-trigger
+    searchParams.delete("select")
+    setSearchParams(searchParams, { replace: true })
+  }, [searchParams, setSearchParams])
 
   // Map to LabelEntity
   const itemEntities: LabelEntity[] = useMemo(
@@ -534,6 +566,43 @@ export default function Labels() {
     })
     setSuccessCount(null)
   }, [locationEntities, locationSearch])
+
+  // Scan handler — resolve scanned code and add to selection
+  const handleScan = useCallback(async (code: string) => {
+    setScanStatus(null)
+    try {
+      const result = await apiFetch<ScanResult>(`/scan/${encodeURIComponent(code)}`)
+      const entityType = result.entity_type as "item" | "location"
+      if (entityType === "item") {
+        setSelectedItems((prev) => {
+          if (prev.has(result.entity_id)) {
+            setScanStatus({ message: `"${result.name}" is already selected.`, isError: false })
+            return prev
+          }
+          setScanStatus({ message: `Added item "${result.name}" to labels.`, isError: false })
+          return new Set(prev).add(result.entity_id)
+        })
+        setTab("items")
+      } else if (entityType === "location") {
+        setSelectedLocations((prev) => {
+          if (prev.has(result.entity_id)) {
+            setScanStatus({ message: `"${result.name}" is already selected.`, isError: false })
+            return prev
+          }
+          setScanStatus({ message: `Added location "${result.name}" to labels.`, isError: false })
+          return new Set(prev).add(result.entity_id)
+        })
+        setTab("locations")
+      } else {
+        setScanStatus({ message: `Unsupported entity type: ${result.entity_type}`, isError: true })
+      }
+    } catch (err) {
+      setScanStatus({
+        message: err instanceof Error ? err.message : "Could not resolve scanned code.",
+        isError: true,
+      })
+    }
+  }, [])
 
   // Collect all selected entities for preview and generation
   const allSelected: LabelEntity[] = useMemo(() => {
@@ -642,6 +711,10 @@ export default function Labels() {
                       </Badge>
                     )}
                   </TabsTrigger>
+                  <TabsTrigger value="scan" className="flex-1 min-h-[44px]">
+                    <ScanLine className="mr-1.5 h-4 w-4" />
+                    Scan
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="items">
@@ -668,6 +741,31 @@ export default function Labels() {
                     isLoading={locationsLoading}
                     entityType="location"
                   />
+                </TabsContent>
+
+                <TabsContent value="scan">
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Scan a QR code to add the item or location to your label print queue.
+                    </p>
+                    <QrScanner onScan={handleScan} />
+                    {scanStatus && (
+                      <div
+                        className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                          scanStatus.isError
+                            ? "border-destructive/50 bg-destructive/10 text-destructive"
+                            : "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
+                        }`}
+                      >
+                        {scanStatus.isError ? (
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <Eye className="h-4 w-4 shrink-0" />
+                        )}
+                        <span>{scanStatus.message}</span>
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>

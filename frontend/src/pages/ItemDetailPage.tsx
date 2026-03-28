@@ -18,15 +18,12 @@ import {
   Upload,
   Trash2,
   Star,
-  Search,
-  Camera,
-  Loader2,
 } from "lucide-react"
-import { useItem, useMoveItem, useAdjustStock, useDeleteItem } from "@/hooks/useItem"
+import { useItem, useAdjustStock, useDeleteItem, useContainerContents } from "@/hooks/useItem"
 import { useItemHistory, type AuditEvent } from "@/hooks/useItemHistory"
 import { useItemRelationships, type ItemRelationship } from "@/hooks/useItemRelationships"
-import { useLocations } from "@/hooks/useLocations"
 import { useUploadMedia, useDeleteMedia, useSetPrimaryMedia } from "@/hooks/useMedia"
+import { MoveItemsDialog } from "@/components/MoveItemsDialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -53,7 +50,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { QrScanner, extractCode } from "@/components/QrScanner"
 import { apiFetch } from "@/api/client"
 import type { ItemResponse } from "@/types"
 
@@ -109,225 +105,6 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
   compatible_with: "Compatible with",
   belongs_to_kit: "Belongs to kit",
   manual_for: "Manual for",
-}
-
-// ---------------------------------------------------------------------------
-// Move Dialog
-// ---------------------------------------------------------------------------
-
-function MoveDialog({
-  open,
-  onOpenChange,
-  itemId,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  itemId: string
-}) {
-  const [mode, setMode] = useState<"search" | "scan">("search")
-  const [search, setSearch] = useState("")
-  const [selectedId, setSelectedId] = useState("")
-  const [selectedName, setSelectedName] = useState("")
-  const [note, setNote] = useState("")
-  const [scanError, setScanError] = useState<string | null>(null)
-  const [resolving, setResolving] = useState(false)
-  const move = useMoveItem(itemId)
-  const { data } = useLocations({ rootOnly: false })
-  const allLocations = data?.locations ?? []
-
-  const filtered = search.trim()
-    ? allLocations.filter(
-        (l) =>
-          l.name.toLowerCase().includes(search.toLowerCase()) ||
-          l.code.toLowerCase().includes(search.toLowerCase()) ||
-          (l.path_text && l.path_text.toLowerCase().includes(search.toLowerCase()))
-      )
-    : allLocations
-
-  const handleSelect = (loc: { id: string; name: string; path_text?: string | null }) => {
-    setSelectedId(loc.id)
-    setSelectedName(loc.path_text || loc.name)
-    setSearch("")
-    setScanError(null)
-  }
-
-  const handleQrScan = async (code: string) => {
-    setScanError(null)
-    setResolving(true)
-    try {
-      const result = await apiFetch<{
-        entity_type: string
-        entity_id: string
-        name: string
-        code: string
-        archived: boolean
-      }>(`/scan/${encodeURIComponent(code)}`)
-
-      if (result.entity_type !== "location") {
-        setScanError(`Scanned code is a ${result.entity_type}, not a location.`)
-        setResolving(false)
-        return
-      }
-      if (result.archived) {
-        setScanError("This location is archived.")
-        setResolving(false)
-        return
-      }
-      // Find the full location info from our loaded list for path_text
-      const match = allLocations.find((l) => l.id === result.entity_id)
-      setSelectedId(result.entity_id)
-      setSelectedName(match?.path_text || match?.name || result.name)
-    } catch {
-      setScanError("Could not resolve scanned code. Try again or search manually.")
-    }
-    setResolving(false)
-  }
-
-  const handleSubmit = () => {
-    if (!selectedId) return
-    move.mutate(
-      { location_id: selectedId, note: note.trim() || undefined },
-      {
-        onSuccess: () => {
-          onOpenChange(false)
-          setSelectedId("")
-          setSelectedName("")
-          setSearch("")
-          setNote("")
-          setScanError(null)
-          setMode("search")
-        },
-      }
-    )
-  }
-
-  const handleClear = () => {
-    setSelectedId("")
-    setSelectedName("")
-    setScanError(null)
-  }
-
-  const errorMessage = move.isError
-    ? typeof (move.error as any)?.message === "string"
-      ? (move.error as Error).message
-      : "Failed to move item"
-    : null
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Move Item</DialogTitle>
-          <DialogDescription>Choose a destination location.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          {/* Location selected — show confirmation chip */}
-          {selectedId ? (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
-              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-sm flex-1 truncate">{selectedName}</span>
-              <button
-                onClick={handleClear}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Change
-              </button>
-            </div>
-          ) : (
-            <>
-              {/* Mode toggle */}
-              <div className="flex gap-1 rounded-md border p-1">
-                <button
-                  onClick={() => { setMode("search"); setScanError(null) }}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                    mode === "search"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Search className="h-3.5 w-3.5" />
-                  Search
-                </button>
-                <button
-                  onClick={() => { setMode("scan"); setScanError(null) }}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                    mode === "scan"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Camera className="h-3.5 w-3.5" />
-                  Scan QR
-                </button>
-              </div>
-
-              {mode === "search" ? (
-                <div>
-                  <Label>Search locations</Label>
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Type to search by name, code, or path..."
-                    autoFocus
-                  />
-                  {filtered.length > 0 && (
-                    <div className="mt-1 max-h-48 overflow-y-auto rounded-md border">
-                      {filtered.slice(0, 20).map((loc) => (
-                        <button
-                          key={loc.id}
-                          onClick={() => handleSelect(loc)}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted min-h-[44px]"
-                        >
-                          <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium">{loc.name}</p>
-                            {loc.path_text && (
-                              <p className="truncate text-xs text-muted-foreground">{loc.path_text}</p>
-                            )}
-                          </div>
-                          <span className="text-xs text-muted-foreground shrink-0">{loc.code}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {search.trim() && filtered.length === 0 && (
-                    <p className="mt-1 text-xs text-muted-foreground">No locations found.</p>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {resolving ? (
-                    <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Resolving location...
-                    </div>
-                  ) : (
-                    <QrScanner onScan={handleQrScan} />
-                  )}
-                  {scanError && (
-                    <p className="text-sm text-destructive">{scanError}</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          <div>
-            <Label>Note (optional)</Label>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Movement note" />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={!selectedId || move.isPending}>
-            {move.isPending ? "Moving..." : "Move"}
-          </Button>
-        </DialogFooter>
-        {errorMessage && (
-          <p className="text-sm text-destructive">{errorMessage}</p>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -735,6 +512,38 @@ function LocationSection({ item }: { item: ItemResponse }) {
   )
 }
 
+function ContentsSection({ item }: { item: ItemResponse }) {
+  const { data: contents, isLoading } = useContainerContents(item.id, item.is_container)
+  if (!item.is_container) return null
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FolderInput className="h-4 w-4" /> Contents</CardTitle></CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-8 w-full" />
+        ) : !contents || contents.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No items in this container.</p>
+        ) : (
+          <div className="space-y-1">
+            {contents.map((c) => (
+              <Link
+                key={c.id}
+                to={`/items/${c.id}`}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted min-h-[36px]"
+              >
+                <span className="flex-1 truncate">{c.name}</span>
+                <Badge variant="outline" className="text-xs shrink-0">{c.item_type.replace("_", " ")}</Badge>
+                <span className="text-xs text-muted-foreground shrink-0">{c.code}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function RelationshipsSection({ itemId }: { itemId: string }) {
   const { data: relationships, isLoading } = useItemRelationships(itemId)
 
@@ -908,18 +717,7 @@ async function downloadLabelPdf(
 }
 
 function LabelSection({ item }: { item: ItemResponse }) {
-  const [generating, setGenerating] = useState(false)
-
-  const handleGenerate = async () => {
-    setGenerating(true)
-    try {
-      await downloadLabelPdf("item", item.id, "adhesive", item.code)
-    } catch {
-      // silently fail — toast could be added later
-    } finally {
-      setGenerating(false)
-    }
-  }
+  const navigate = useNavigate()
 
   return (
     <Card>
@@ -936,11 +734,10 @@ function LabelSection({ item }: { item: ItemResponse }) {
               variant="outline"
               size="sm"
               className="mt-2 min-h-[36px]"
-              onClick={handleGenerate}
-              disabled={generating}
+              onClick={() => navigate(`/labels?select=item:${item.id}`)}
             >
               <QrCode className="mr-1.5 h-4 w-4" />
-              {generating ? "Generating..." : "Download Label"}
+              Generate Label
             </Button>
           </div>
         </div>
@@ -961,7 +758,6 @@ export default function ItemDetailPage() {
   const [moveOpen, setMoveOpen] = useState(false)
   const [stockOpen, setStockOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [labelGenerating, setLabelGenerating] = useState(false)
 
   if (isLoading) {
     return (
@@ -1022,19 +818,9 @@ export default function ItemDetailPage() {
             variant="outline"
             size="sm"
             className="min-h-[44px]"
-            disabled={labelGenerating}
-            onClick={async () => {
-              setLabelGenerating(true)
-              try {
-                await downloadLabelPdf("item", item.id, "adhesive", item.code)
-              } catch {
-                // silent
-              } finally {
-                setLabelGenerating(false)
-              }
-            }}
+            onClick={() => navigate(`/labels?select=item:${item.id}`)}
           >
-            <QrCode className="mr-1.5 h-4 w-4" /> {labelGenerating ? "Generating..." : "Generate Label"}
+            <QrCode className="mr-1.5 h-4 w-4" /> Generate Label
           </Button>
           <Button variant="outline" size="sm" className="min-h-[44px]" onClick={() => setArchiveOpen(true)}>
             <Archive className="mr-1.5 h-4 w-4" /> Archive
@@ -1055,6 +841,7 @@ export default function ItemDetailPage() {
         </div>
         <div className="space-y-6">
           <LocationSection item={item} />
+          <ContentsSection item={item} />
           <RelationshipsSection itemId={item.id} />
           <FilesSection item={item} />
           <LabelSection item={item} />
@@ -1062,7 +849,7 @@ export default function ItemDetailPage() {
       </div>
 
       {/* Dialogs */}
-      <MoveDialog open={moveOpen} onOpenChange={setMoveOpen} itemId={item.id} />
+      <MoveItemsDialog open={moveOpen} onOpenChange={setMoveOpen} itemIds={[item.id]} />
       <StockAdjustDialog open={stockOpen} onOpenChange={setStockOpen} itemId={item.id} />
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} item={item} />
     </div>
