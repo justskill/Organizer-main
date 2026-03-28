@@ -24,6 +24,7 @@ import { useItemHistory, type AuditEvent } from "@/hooks/useItemHistory"
 import { useItemRelationships, type ItemRelationship } from "@/hooks/useItemRelationships"
 import { useUploadMedia, useDeleteMedia, useSetPrimaryMedia } from "@/hooks/useMedia"
 import { MoveItemsDialog } from "@/components/MoveItemsDialog"
+import { CameraCapture } from "@/components/CameraCapture"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -343,12 +344,17 @@ function PhotoSection({ item }: { item: ItemResponse }) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base"><Image className="h-4 w-4" /> Photos</CardTitle>
-            <label className="cursor-pointer">
-              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-              <span className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted min-h-[36px]">
-                <Upload className="h-3.5 w-3.5" /> Upload
-              </span>
-            </label>
+            <div className="flex items-center gap-2">
+              <CameraCapture
+                onCapture={(file) => upload.mutate({ file, ownerType: "item", ownerId: item.id })}
+              />
+              <label className="cursor-pointer">
+                <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                <span className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-muted min-h-[36px]">
+                  <Upload className="h-3.5 w-3.5" /> Upload
+                </span>
+              </label>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
