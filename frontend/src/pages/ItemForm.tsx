@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { ArrowLeft, Save, Camera, X, Loader2, ImagePlus } from "lucide-react"
+import { ArrowLeft, Save, Camera, X, Loader2, ImagePlus, ScanBarcode } from "lucide-react"
 import { toast } from "sonner"
 import { useItem, useCreateItem, useUpdateItem } from "@/hooks/useItem"
 import { useCategories } from "@/hooks/useCategories"
@@ -14,8 +14,10 @@ import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import ReviewPanel, { applyClassificationToForm } from "@/components/ReviewPanel"
 import { CameraCapture } from "@/components/CameraCapture"
+import { QrScanner } from "@/components/QrScanner"
 import type { ItemType, ItemCondition } from "@/types"
 
 const ITEM_TYPES: ItemType[] = [
@@ -44,6 +46,7 @@ export interface FormData {
   model_number: string
   part_number: string
   serial_number: string
+  barcode: string
   condition: string
   status: string
   is_container: boolean
@@ -71,6 +74,7 @@ export const EMPTY_FORM: FormData = {
   model_number: "",
   part_number: "",
   serial_number: "",
+  barcode: "",
   condition: "",
   status: "",
   is_container: false,
@@ -109,6 +113,7 @@ export default function ItemForm() {
   const [apiKeyConfigured, setApiKeyConfigured] = useState<boolean | null>(null)
   const [classificationResult, setClassificationResult] = useState<ClassificationResult | null>(null)
   const [savePhotosToItem, setSavePhotosToItem] = useState(false)
+  const [barcodeScanOpen, setBarcodeScanOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Check classification settings on mount (only for new items)
@@ -129,6 +134,7 @@ export default function ItemForm() {
         model_number: existingItem.model_number ?? "",
         part_number: existingItem.part_number ?? "",
         serial_number: existingItem.serial_number ?? "",
+        barcode: existingItem.barcode ?? "",
         condition: existingItem.condition ?? "",
         status: existingItem.status ?? "",
         is_container: existingItem.is_container,
@@ -178,6 +184,7 @@ export default function ItemForm() {
     if (form.model_number) payload.model_number = form.model_number
     if (form.part_number) payload.part_number = form.part_number
     if (form.serial_number) payload.serial_number = form.serial_number
+    if (form.barcode) payload.barcode = form.barcode
     if (form.condition) payload.condition = form.condition
     if (form.status) payload.status = form.status
     payload.is_container = form.is_container
@@ -534,6 +541,15 @@ export default function ItemForm() {
                 <Label htmlFor="serial_number">Serial #</Label>
                 <Input id="serial_number" value={form.serial_number} onChange={(e) => set("serial_number", e.target.value)} />
               </div>
+              <div>
+                <Label htmlFor="barcode">Barcode / UPC</Label>
+                <div className="flex gap-2">
+                  <Input id="barcode" value={form.barcode} onChange={(e) => set("barcode", e.target.value)} placeholder="e.g. 012345678901" className="flex-1" />
+                  <Button type="button" variant="outline" size="icon" onClick={() => setBarcodeScanOpen(true)} aria-label="Scan barcode">
+                    <ScanBarcode className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -645,6 +661,18 @@ export default function ItemForm() {
           </Button>
         </div>
       </form>
+
+      <Dialog open={barcodeScanOpen} onOpenChange={setBarcodeScanOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Scan Barcode</DialogTitle>
+          </DialogHeader>
+          <QrScanner onScan={(code) => {
+            set("barcode", code)
+            setBarcodeScanOpen(false)
+          }} />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -80,6 +80,7 @@ async def _build_item_response(db: AsyncSession, item) -> ItemResponse:
         model_number=item.model_number,
         part_number=item.part_number,
         serial_number=item.serial_number,
+        barcode=item.barcode,
         condition=item.condition,
         status=item.status,
         quantity_mode=item.quantity_mode,

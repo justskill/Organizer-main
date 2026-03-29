@@ -376,8 +376,8 @@ def render_label_pdf(
 
 
 async def resolve_code(db: AsyncSession, code: str) -> dict | None:
-    """Resolve a short code to its entity type, ID, and archived status."""
-    # Try item
+    """Resolve a short code or barcode to its entity type, ID, and archived status."""
+    # Try item by short code
     result = await db.execute(select(Item).where(Item.code == code))
     item = result.scalar_one_or_none()
     if item:
@@ -390,7 +390,7 @@ async def resolve_code(db: AsyncSession, code: str) -> dict | None:
             "is_container": item.is_container,
         }
 
-    # Try location
+    # Try location by short code
     result = await db.execute(select(Location).where(Location.code == code))
     location = result.scalar_one_or_none()
     if location:
@@ -400,6 +400,19 @@ async def resolve_code(db: AsyncSession, code: str) -> dict | None:
             "name": location.name,
             "code": location.code,
             "archived": location.archived_at is not None,
+        }
+
+    # Try item by barcode (UPC)
+    result = await db.execute(select(Item).where(Item.barcode == code))
+    item = result.scalar_one_or_none()
+    if item:
+        return {
+            "entity_type": "item",
+            "entity_id": str(item.id),
+            "name": item.name,
+            "code": item.code,
+            "archived": item.archived_at is not None,
+            "is_container": item.is_container,
         }
 
     return None

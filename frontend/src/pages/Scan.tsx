@@ -249,7 +249,7 @@ function ManualEntry({ onSubmit }: { onSubmit: (code: string) => void }) {
       <Input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Enter short code (e.g. ITM-2F4K9Q)"
+        placeholder="Enter short code or barcode (e.g. ITM-2F4K9Q)"
         className="min-h-[48px] flex-1 text-base"
         autoComplete="off"
         autoCapitalize="characters"

@@ -64,6 +64,7 @@ export interface ItemResponse {
   model_number: string | null
   part_number: string | null
   serial_number: string | null
+  barcode: string | null
   condition: ItemCondition | null
   status: string | null
   quantity_mode: string | null

@@ -23,6 +23,7 @@ class ItemCreate(BaseModel):
     model_number: str | None = None
     part_number: str | None = None
     serial_number: str | None = None
+    barcode: str | None = None
     condition: ItemCondition | None = None
     status: str | None = None
     quantity_mode: str | None = None
@@ -52,6 +53,7 @@ class ItemUpdate(BaseModel):
     model_number: str | None = None
     part_number: str | None = None
     serial_number: str | None = None
+    barcode: str | None = None
     condition: ItemCondition | None = None
     status: str | None = None
     quantity_mode: str | None = None
@@ -125,6 +127,7 @@ class ItemResponse(BaseModel):
     model_number: str | None = None
     part_number: str | None = None
     serial_number: str | None = None
+    barcode: str | None = None
     condition: ItemCondition | None = None
     status: str | None = None
     quantity_mode: str | None = None

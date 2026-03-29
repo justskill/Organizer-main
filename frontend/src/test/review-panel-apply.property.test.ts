@@ -33,6 +33,7 @@ const formDataArb: fc.Arbitrary<FormData> = fc.record({
   model_number: fc.string({ maxLength: 30 }),
   part_number: fc.string({ maxLength: 30 }),
   serial_number: fc.string({ maxLength: 30 }),
+  barcode: fc.string({ maxLength: 30 }),
   condition: fc.string({ maxLength: 20 }),
   status: fc.string({ maxLength: 20 }),
   is_container: fc.boolean(),
@@ -69,7 +70,7 @@ const uniqueFieldsArb: fc.Arbitrary<ClassificationField[]> = fc
 
 // Non-classifiable form fields that should never be changed
 const NON_CLASSIFIABLE_KEYS: (keyof FormData)[] = [
-  'serial_number', 'status', 'is_container', 'is_serialized',
+  'serial_number', 'barcode', 'status', 'is_container', 'is_serialized',
   'quantity_on_hand', 'minimum_quantity', 'reorder_quantity',
   'unit_of_measure', 'purchase_date', 'purchase_source',
   'purchase_price', 'warranty_expiration', 'calibration_due_date',

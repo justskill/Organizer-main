@@ -282,6 +282,7 @@ function SummarySection({ item }: { item: ItemResponse }) {
           {item.model_number && <InfoField label="Model #" value={item.model_number} />}
           {item.part_number && <InfoField label="Part #" value={item.part_number} />}
           {item.serial_number && <InfoField label="Serial #" value={item.serial_number} />}
+          {item.barcode && <InfoField label="Barcode / UPC" value={item.barcode} />}
           {item.status && <InfoField label="Status" value={item.status} />}
           {item.quantity_on_hand != null && (
             <InfoField label="Quantity" value={`${Number(item.quantity_on_hand)}${item.unit_of_measure ? ` ${item.unit_of_measure}` : ""}`} />

@@ -51,6 +51,7 @@ class Item(UUIDMixin, Base):
     model_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     part_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    barcode: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     condition: Mapped[str | None] = mapped_column(
         Enum(ItemCondition, name="item_condition", native_enum=False), nullable=True

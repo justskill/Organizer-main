@@ -30,6 +30,7 @@ const formDataArb: fc.Arbitrary<FormData> = fc.record({
   model_number: fc.string({ maxLength: 30 }),
   part_number: fc.string({ maxLength: 30 }),
   serial_number: fc.string({ maxLength: 30 }),
+  barcode: fc.string({ maxLength: 30 }),
   condition: fc.string({ maxLength: 20 }),
   status: fc.string({ maxLength: 20 }),
   is_container: fc.boolean(),
