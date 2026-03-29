@@ -47,20 +47,20 @@ def _draw_avery5260_label(c: canvas.Canvas, x: float, y: float, entity_type: str
     qr_bytes = generate_qr_code(qr_payload, box_size=6)
     qr_img = ImageReader(io.BytesIO(qr_bytes))
 
-    padding = 3
-    qr_size = AVERY5260_LABEL_H - 2 * padding
+    padding = 6
+    qr_size = AVERY5260_LABEL_H - 2 * padding  # ~60pt ≈ 0.83"
 
-    # QR code on the left
+    # QR code on the left, vertically centered
     c.drawImage(qr_img, x + padding, y + padding, width=qr_size, height=qr_size)
 
     # Text to the right of QR
-    text_x = x + padding + qr_size + 4
-    text_max_w = AVERY5260_LABEL_W - qr_size - padding * 2 - 8
+    text_x = x + padding + qr_size + 6
+    text_max_w = AVERY5260_LABEL_W - qr_size - padding * 2 - 12
 
-    # Entity type
+    # Entity type — positioned from top of label
     type_size = 6 * text_scale
     c.setFont("Helvetica-Bold", type_size)
-    c.drawString(text_x, y + AVERY5260_LABEL_H - 12, entity_type.upper())
+    c.drawString(text_x, y + AVERY5260_LABEL_H - padding - type_size, entity_type.upper())
 
     # Name (truncate to fit)
     name_size = 7 * text_scale
@@ -68,19 +68,19 @@ def _draw_avery5260_label(c: canvas.Canvas, x: float, y: float, entity_type: str
     display_name = name
     while c.stringWidth(display_name, "Helvetica", name_size) > text_max_w and len(display_name) > 3:
         display_name = display_name[:-4] + "..."
-    c.drawString(text_x, y + AVERY5260_LABEL_H - 24, display_name)
+    c.drawString(text_x, y + AVERY5260_LABEL_H - padding - type_size - name_size - 4, display_name)
 
     # Short code
     code_size = 7 * text_scale
     c.setFont("Courier", code_size)
-    c.drawString(text_x, y + AVERY5260_LABEL_H - 36, short_code)
+    c.drawString(text_x, y + AVERY5260_LABEL_H - padding - type_size - name_size - code_size - 8, short_code)
 
     # Footer text (bottom-right)
     if footer_text:
         footer_size = 5 * text_scale
         c.setFont("Helvetica", footer_size)
         fw = c.stringWidth(footer_text, "Helvetica", footer_size)
-        c.drawString(x + AVERY5260_LABEL_W - fw - 3, y + 3, footer_text)
+        c.drawString(x + AVERY5260_LABEL_W - fw - padding, y + padding, footer_text)
 
 
 def render_avery5260_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0, footer_text: str = "") -> bytes:
@@ -163,7 +163,7 @@ def _draw_avery18163_label(
     # Entity type
     type_size = 9 * text_scale
     c.setFont("Helvetica-Bold", type_size)
-    c.drawString(text_x, y + AVERY18163_LABEL_H - 20, entity_type.upper())
+    c.drawString(text_x, y + AVERY18163_LABEL_H - padding - type_size, entity_type.upper())
 
     # Name (truncate to fit)
     name_size = 11 * text_scale
@@ -171,19 +171,19 @@ def _draw_avery18163_label(
     display_name = name
     while c.stringWidth(display_name, "Helvetica", name_size) > text_max_w and len(display_name) > 3:
         display_name = display_name[:-4] + "..."
-    c.drawString(text_x, y + AVERY18163_LABEL_H - 40, display_name)
+    c.drawString(text_x, y + AVERY18163_LABEL_H - padding - type_size - name_size - 4, display_name)
 
     # Short code
     code_size = 10 * text_scale
     c.setFont("Courier", code_size)
-    c.drawString(text_x, y + AVERY18163_LABEL_H - 58, short_code)
+    c.drawString(text_x, y + AVERY18163_LABEL_H - padding - type_size - name_size - code_size - 8, short_code)
 
     # Footer text (bottom-right)
     if footer_text:
         footer_size = 7 * text_scale
         c.setFont("Helvetica", footer_size)
         fw = c.stringWidth(footer_text, "Helvetica", footer_size)
-        c.drawString(x + AVERY18163_LABEL_W - fw - 6, y + 6, footer_text)
+        c.drawString(x + AVERY18163_LABEL_W - fw - padding, y + padding, footer_text)
 
 
 def render_avery18163_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0, footer_text: str = "") -> bytes:
@@ -251,7 +251,7 @@ def _draw_avery18294_label(
     qr_bytes = generate_qr_code(qr_payload, box_size=4)
     qr_img = ImageReader(io.BytesIO(qr_bytes))
 
-    padding = 2
+    padding = 3
     qr_size = AVERY18294_LABEL_H - 2 * padding
 
     # QR code on the left
@@ -267,19 +267,19 @@ def _draw_avery18294_label(
     display_name = name
     while c.stringWidth(display_name, "Helvetica", name_size) > text_max_w and len(display_name) > 3:
         display_name = display_name[:-4] + "..."
-    c.drawString(text_x, y + AVERY18294_LABEL_H - 10, display_name)
+    c.drawString(text_x, y + AVERY18294_LABEL_H - padding - name_size, display_name)
 
     # Short code
     code_size = 5 * text_scale
     c.setFont("Courier", code_size)
-    c.drawString(text_x, y + AVERY18294_LABEL_H - 20, short_code)
+    c.drawString(text_x, y + AVERY18294_LABEL_H - padding - name_size - code_size - 2, short_code)
 
     # Footer text (bottom-right) — very small on tiny labels
     if footer_text:
         footer_size = 3.5 * text_scale
         c.setFont("Helvetica", footer_size)
         fw = c.stringWidth(footer_text, "Helvetica", footer_size)
-        c.drawString(x + AVERY18294_LABEL_W - fw - 2, y + 2, footer_text)
+        c.drawString(x + AVERY18294_LABEL_W - fw - padding, y + padding, footer_text)
 
 
 def render_avery18294_sheet(labels: list[dict], start_cell: int = 1, text_scale: float = 1.0, footer_text: str = "") -> bytes:
