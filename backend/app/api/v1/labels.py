@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -26,12 +26,26 @@ class BatchLabelEntity(BaseModel):
     entity_id: UUID
 
 
+TEMPLATE_MAX_CELLS = {
+    "avery5260": 30,
+    "avery18163": 10,
+    "avery18294": 60,
+}
+
+
 class BatchLabelRequest(BaseModel):
     entities: list[BatchLabelEntity]
-    start_cell: int = Field(1, ge=1, le=30, description="1-based cell to start at")
+    start_cell: int = Field(1, ge=1, description="1-based cell to start at")
     label_template: str = Field("avery5260", description="'avery5260', 'avery18163', or 'avery18294'")
     text_scale: float = Field(1.0, ge=0.5, le=2.0, description="Text size multiplier (0.5–2.0)")
     footer_text: str = Field("", max_length=60, description="Optional text shown at bottom-right of each label")
+
+    @model_validator(mode="after")
+    def validate_start_cell(self):
+        max_cells = TEMPLATE_MAX_CELLS.get(self.label_template, 30)
+        if self.start_cell > max_cells:
+            raise ValueError(f"start_cell must be <= {max_cells} for template {self.label_template}")
+        return self
 
 
 class ScanResponse(BaseModel):
