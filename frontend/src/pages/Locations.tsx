@@ -11,10 +11,12 @@ import {
   StickyNote,
   X,
   Plus,
+  ListPlus,
 } from "lucide-react"
 import { useLocations, useLocationContents } from "@/hooks/useLocations"
 import { useTags } from "@/hooks/useTags"
 import { MoveLocationDialog } from "@/components/MoveLocationDialog"
+import { useAddToLabelQueue } from "@/hooks/useLabelQueue"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -134,6 +136,7 @@ function LocationBreadcrumb({ pathText }: { pathText: string | null }) {
 function ContentsPanel({ locationId }: { locationId: string }) {
   const { data, isLoading, isError } = useLocationContents(locationId)
   const [moveOpen, setMoveOpen] = useState(false)
+  const addToQueue = useAddToLabelQueue()
 
   if (isLoading) {
     return (
@@ -174,6 +177,14 @@ function ContentsPanel({ locationId }: { locationId: string }) {
           </Button>
           <Button variant="outline" size="sm" onClick={() => setMoveOpen(true)}>
             <FolderInput className="mr-1.5 h-4 w-4" /> Move
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => addToQueue.mutate([{ entity_type: "location", entity_id: location.id }])}
+            disabled={addToQueue.isPending}
+          >
+            <ListPlus className="mr-1.5 h-4 w-4" /> Label Queue
           </Button>
           <MoveLocationDialog
             open={moveOpen}

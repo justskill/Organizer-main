@@ -11,9 +11,11 @@ import {
   FolderOpen,
   Tag,
   StickyNote,
+  ListPlus,
 } from "lucide-react"
 import { useLocation, useLocationContents } from "@/hooks/useLocations"
 import { MoveLocationDialog } from "@/components/MoveLocationDialog"
+import { useAddToLabelQueue } from "@/hooks/useLabelQueue"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -81,6 +83,7 @@ export default function LocationDetailPage() {
   const { data: location, isLoading, isError } = useLocation(id)
   const { data: contents, isLoading: contentsLoading } = useLocationContents(id)
   const [moveOpen, setMoveOpen] = useState(false)
+  const addToQueue = useAddToLabelQueue()
 
   if (isLoading) {
     return (
@@ -159,6 +162,14 @@ export default function LocationDetailPage() {
             onClick={() => navigate(`/labels?select=location:${location.id}`)}
           >
             <QrCode className="mr-1.5 h-4 w-4" /> Generate Label
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => addToQueue.mutate([{ entity_type: "location", entity_id: location.id }])}
+            disabled={addToQueue.isPending}
+          >
+            <ListPlus className="mr-1.5 h-4 w-4" /> Add to Label Queue
           </Button>
         </div>
       </div>

@@ -62,7 +62,7 @@ app.add_middleware(
 )
 
 # Router includes
-from app.api.v1 import auth, health, items, locations, categories, tags, search, media, labels, export, saved_views, classify
+from app.api.v1 import auth, health, items, locations, categories, tags, search, media, labels, export, saved_views, classify, label_queue
 
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
@@ -74,6 +74,7 @@ app.include_router(tags.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(media.router, prefix="/api/v1")
 app.include_router(labels.router, prefix="/api/v1")
+app.include_router(label_queue.router, prefix="/api/v1")
 app.include_router(export.router, prefix="/api/v1")
 app.include_router(saved_views.router, prefix="/api/v1")
 app.include_router(classify.router, prefix="/api/v1")

@@ -15,12 +15,14 @@ from app.models.audit import AuditEvent
 from app.models.saved_view import SavedView
 from app.models.api_token import APIToken
 from app.models.classification_settings import ClassificationSettings
+from app.models.label_queue import LabelQueueItem
 
 __all__ = [
     "Base",
     "User", "UserRole",
     "APIToken",
     "ClassificationSettings",
+    "LabelQueueItem",
     "ItemCategory",
     "Item", "ItemType", "ItemCondition",
     "Location",

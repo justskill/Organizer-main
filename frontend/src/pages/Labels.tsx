@@ -11,9 +11,12 @@ import {
   AlertCircle,
   Eye,
   ScanLine,
+  ListPlus,
+  Trash2,
 } from "lucide-react"
 import { useItems } from "@/hooks/useItems"
 import { useLocations } from "@/hooks/useLocations"
+import { useLabelQueue, useRemoveFromLabelQueue, useClearLabelQueue } from "@/hooks/useLabelQueue"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -441,7 +444,7 @@ function EntitySelectionList({
 // ---------------------------------------------------------------------------
 
 export default function Labels() {
-  const [tab, setTab] = useState("items")
+  const [tab, setTab] = useState("queue")
   const [itemSearch, setItemSearch] = useState("")
   const [locationSearch, setLocationSearch] = useState("")
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
@@ -459,6 +462,9 @@ export default function Labels() {
   // Fetch data
   const { data: itemsData, isLoading: itemsLoading } = useItems({ pageSize: 200 })
   const { data: locationsData, isLoading: locationsLoading } = useLocations({ pageSize: 200 })
+  const { data: queueItems = [], isLoading: queueLoading } = useLabelQueue()
+  const removeFromQueue = useRemoveFromLabelQueue()
+  const clearQueue = useClearLabelQueue()
 
   // Pre-select entity from URL query param (e.g. ?select=item:uuid)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -605,11 +611,23 @@ export default function Labels() {
   }, [])
 
   // Collect all selected entities for preview and generation
+  const queueEntities: LabelEntity[] = useMemo(() => {
+    return queueItems.map((q) => ({
+      id: q.entity_id,
+      code: q.entity_code,
+      name: q.entity_name,
+      entityType: q.entity_type as "item" | "location",
+    }))
+  }, [queueItems])
+
   const allSelected: LabelEntity[] = useMemo(() => {
     const items = itemEntities.filter((e) => selectedItems.has(e.id))
     const locs = locationEntities.filter((e) => selectedLocations.has(e.id))
-    return [...items, ...locs]
-  }, [itemEntities, locationEntities, selectedItems, selectedLocations])
+    // Merge queue entities, deduplicating by id
+    const manualIds = new Set([...items.map((e) => e.id), ...locs.map((e) => e.id)])
+    const uniqueQueue = queueEntities.filter((e) => !manualIds.has(e.id))
+    return [...items, ...locs, ...uniqueQueue]
+  }, [itemEntities, locationEntities, selectedItems, selectedLocations, queueEntities])
 
   // Generate labels — opens PDF in new tab for print preview
   const handleGenerate = useCallback(async () => {
@@ -671,7 +689,7 @@ export default function Labels() {
     downloadBlobUrl(pdfUrl, filename)
   }, [pdfUrl, labelFormat])
 
-  const totalSelected = selectedItems.size + selectedLocations.size
+  const totalSelected = allSelected.length
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -693,6 +711,15 @@ export default function Labels() {
             <CardContent>
               <Tabs value={tab} onValueChange={setTab}>
                 <TabsList className="w-full">
+                  <TabsTrigger value="queue" className="flex-1 min-h-[44px]">
+                    <ListPlus className="mr-1.5 h-4 w-4" />
+                    Queue
+                    {queueItems.length > 0 && (
+                      <Badge variant="secondary" className="ml-1.5">
+                        {queueItems.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
                   <TabsTrigger value="items" className="flex-1 min-h-[44px]">
                     <Package className="mr-1.5 h-4 w-4" />
                     Items
@@ -716,6 +743,71 @@ export default function Labels() {
                     Scan
                   </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="queue">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Your server-side label queue. Add items from any device, print from here.
+                      </p>
+                      {queueItems.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => clearQueue.mutate()}
+                          disabled={clearQueue.isPending}
+                        >
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                          Clear All
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="max-h-[400px] space-y-1 overflow-y-auto rounded-md border p-1">
+                      {queueLoading && (
+                        <div className="space-y-2 p-2">
+                          {Array.from({ length: 3 }).map((_, i) => (
+                            <Skeleton key={i} className="h-10 w-full" />
+                          ))}
+                        </div>
+                      )}
+
+                      {!queueLoading && queueItems.length === 0 && (
+                        <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+                          <ListPlus className="h-8 w-8" />
+                          <p className="text-sm">Queue is empty.</p>
+                          <p className="text-xs">Add items or locations from their detail pages or list views.</p>
+                        </div>
+                      )}
+
+                      {!queueLoading &&
+                        queueItems.map((q) => {
+                          const Icon = q.entity_type === "item" ? Package : MapPin
+                          return (
+                            <div
+                              key={q.id}
+                              className="flex items-center gap-3 rounded-md px-3 py-2 hover:bg-muted/50 min-h-[44px]"
+                            >
+                              <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium">{q.entity_name}</p>
+                              </div>
+                              <span className="text-xs text-muted-foreground font-mono shrink-0">
+                                {q.entity_code}
+                              </span>
+                              <button
+                                onClick={() => removeFromQueue.mutate(q.id)}
+                                className="text-muted-foreground hover:text-destructive shrink-0 p-1"
+                                aria-label={`Remove ${q.entity_name} from queue`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </div>
+                </TabsContent>
 
                 <TabsContent value="items">
                   <EntitySelectionList

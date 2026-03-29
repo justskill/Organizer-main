@@ -18,6 +18,7 @@ import {
   Upload,
   Trash2,
   Star,
+  ListPlus,
 } from "lucide-react"
 import { useItem, useAdjustStock, useDeleteItem, useContainerContents } from "@/hooks/useItem"
 import { useItemHistory, type AuditEvent } from "@/hooks/useItemHistory"
@@ -52,6 +53,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { apiFetch } from "@/api/client"
+import { useAddToLabelQueue } from "@/hooks/useLabelQueue"
 import type { ItemResponse } from "@/types"
 
 // ---------------------------------------------------------------------------
@@ -764,6 +766,7 @@ export default function ItemDetailPage() {
   const [moveOpen, setMoveOpen] = useState(false)
   const [stockOpen, setStockOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const addToQueue = useAddToLabelQueue()
 
   if (isLoading) {
     return (
@@ -827,6 +830,15 @@ export default function ItemDetailPage() {
             onClick={() => navigate(`/labels?select=item:${item.id}`)}
           >
             <QrCode className="mr-1.5 h-4 w-4" /> Generate Label
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-[44px]"
+            onClick={() => addToQueue.mutate([{ entity_type: "item", entity_id: item.id }])}
+            disabled={addToQueue.isPending}
+          >
+            <ListPlus className="mr-1.5 h-4 w-4" /> Add to Label Queue
           </Button>
           <Button variant="outline" size="sm" className="min-h-[44px]" onClick={() => setArchiveOpen(true)}>
             <Archive className="mr-1.5 h-4 w-4" /> Archive

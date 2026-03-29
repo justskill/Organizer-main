@@ -26,6 +26,7 @@ import {
   Save,
   Trash2,
   Plus,
+  ListPlus,
 } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { useItems } from "@/hooks/useItems"
@@ -41,6 +42,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { MoveItemsDialog } from "@/components/MoveItemsDialog"
+import { useAddToLabelQueue } from "@/hooks/useLabelQueue"
 import type { ItemResponse, ItemType } from "@/types"
 
 // ---------------------------------------------------------------------------
@@ -681,12 +683,16 @@ function BulkActionsBar({
   onArchive,
   onTag,
   onMove,
+  onAddToQueue,
+  addingToQueue,
   onClear,
 }: {
   count: number
   onArchive: () => void
   onTag: () => void
   onMove: () => void
+  onAddToQueue: () => void
+  addingToQueue?: boolean
   onClear: () => void
 }) {
   return (
@@ -704,6 +710,10 @@ function BulkActionsBar({
         <Button variant="outline" size="sm" onClick={onMove}>
           <FolderInput className="mr-1.5 h-3.5 w-3.5" />
           Move
+        </Button>
+        <Button variant="outline" size="sm" onClick={onAddToQueue} disabled={addingToQueue}>
+          <ListPlus className="mr-1.5 h-3.5 w-3.5" />
+          Label Queue
         </Button>
       </div>
       <button onClick={onClear} className="ml-auto text-xs text-muted-foreground hover:text-foreground">
@@ -857,6 +867,7 @@ export default function Items() {
 
   // Move dialog state
   const [moveDialogOpen, setMoveDialogOpen] = useState(false)
+  const addToQueue = useAddToLabelQueue()
 
   // Bulk action stubs
   const handleBulkArchive = () => {
@@ -869,6 +880,9 @@ export default function Items() {
   }
   const handleBulkMove = () => {
     setMoveDialogOpen(true)
+  }
+  const handleBulkAddToQueue = () => {
+    addToQueue.mutate(selectedIds.map((id) => ({ entity_type: "item" as const, entity_id: id })))
   }
 
   const navigate = useNavigate()
@@ -937,6 +951,8 @@ export default function Items() {
           onArchive={handleBulkArchive}
           onTag={handleBulkTag}
           onMove={handleBulkMove}
+          onAddToQueue={handleBulkAddToQueue}
+          addingToQueue={addToQueue.isPending}
           onClear={() => setRowSelection({})}
         />
       )}
