@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useCallback } from "react"
 import { useNavigate, Link } from "react-router-dom"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import {
   Camera,
-  CameraOff,
   Search,
   FolderInput,
   PackageMinus,
@@ -16,7 +15,6 @@ import {
   Box,
   Loader2,
 } from "lucide-react"
-import { Html5Qrcode } from "html5-qrcode"
 import { apiFetch } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +24,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { MoveItemsDialog } from "@/components/MoveItemsDialog"
 import { MoveLocationDialog } from "@/components/MoveLocationDialog"
+import { QrScanner, extractCode } from "@/components/QrScanner"
 import type { LocationContents, ItemBrief } from "@/types"
 
 // ---------------------------------------------------------------------------
@@ -62,170 +61,6 @@ function useContents(entityType: string | undefined, entityId: string | undefine
     enabled: isLocation && !!entityId,
     staleTime: 30_000,
   })
-}
-
-// ---------------------------------------------------------------------------
-// Helper: extract short code from QR payload
-// ---------------------------------------------------------------------------
-
-function extractCode(raw: string): string {
-  // QR payload is `/scan/{SHORT_CODE}` or a full URL ending with `/scan/{code}`
-  const scanMatch = raw.match(/\/scan\/([A-Za-z0-9_-]+)$/)
-  if (scanMatch) return scanMatch[1]
-  // Otherwise treat the whole string as a code
-  return raw.trim()
-}
-
-// ---------------------------------------------------------------------------
-// QR Scanner component
-// ---------------------------------------------------------------------------
-
-function QrScanner({ onScan }: { onScan: (code: string) => void }) {
-  const [scanning, setScanning] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const scannerRef = useRef<Html5Qrcode | null>(null)
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const scanCallbackRef = useRef(onScan)
-  scanCallbackRef.current = onScan
-
-  // Create / destroy the scanner's DOM element outside React's tree
-  const ensureScannerDiv = useCallback(() => {
-    if (!wrapperRef.current) return
-    let el = wrapperRef.current.querySelector("#qr-reader") as HTMLDivElement | null
-    if (!el) {
-      el = document.createElement("div")
-      el.id = "qr-reader"
-      wrapperRef.current.appendChild(el)
-    }
-  }, [])
-
-  const removeScannerDiv = useCallback(() => {
-    if (!wrapperRef.current) return
-    const el = wrapperRef.current.querySelector("#qr-reader")
-    if (el) {
-      // html5-qrcode leaves child nodes behind — nuke them first
-      el.innerHTML = ""
-      el.remove()
-    }
-  }, [])
-
-  const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
-      try {
-        const state = scannerRef.current.getState()
-        if (state === 2) {
-          await scannerRef.current.stop()
-        }
-      } catch {
-        // ignore stop errors
-      }
-      try {
-        scannerRef.current.clear()
-      } catch {
-        // ignore
-      }
-      scannerRef.current = null
-    }
-    removeScannerDiv()
-    setScanning(false)
-  }, [removeScannerDiv])
-
-  const startScanner = useCallback(async () => {
-    setError(null)
-    // Make sure any previous scanner DOM is gone
-    await stopScanner()
-    ensureScannerDiv()
-    try {
-      const scanner = new Html5Qrcode("qr-reader")
-      scannerRef.current = scanner
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          const code = extractCode(decodedText)
-          if (code) {
-            scanCallbackRef.current(code)
-            stopScanner()
-          }
-        },
-        () => {
-          // ignore scan failures (no QR in frame)
-        }
-      )
-      setScanning(true)
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not access camera. Check permissions."
-      )
-      removeScannerDiv()
-      setScanning(false)
-    }
-  }, [stopScanner, ensureScannerDiv, removeScannerDiv])
-
-  useEffect(() => {
-    return () => {
-      // cleanup on unmount — fire-and-forget
-      if (scannerRef.current) {
-        const s = scannerRef.current
-        scannerRef.current = null
-        try {
-          const state = s.getState()
-          if (state === 2) {
-            s.stop().catch(() => {})
-          }
-          s.clear()
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }, [])
-
-  return (
-    <div className="space-y-3">
-      {/* Wrapper that React owns — scanner div is injected imperatively inside */}
-      <div
-        ref={wrapperRef}
-        className="mx-auto w-full max-w-sm overflow-hidden rounded-lg border bg-muted"
-        style={{ minHeight: scanning ? 300 : 200 }}
-      >
-        {!scanning && (
-          <div className="flex h-[200px] flex-col items-center justify-center gap-3 text-muted-foreground">
-            <Camera className="h-10 w-10" />
-            <p className="text-sm">Camera preview will appear here</p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-center gap-2">
-        {!scanning ? (
-          <Button onClick={startScanner} size="lg" className="min-h-[48px] min-w-[160px]">
-            <Camera className="mr-2 h-5 w-5" />
-            Start Camera
-          </Button>
-        ) : (
-          <Button
-            onClick={stopScanner}
-            variant="outline"
-            size="lg"
-            className="min-h-[48px] min-w-[160px]"
-          >
-            <CameraOff className="mr-2 h-5 w-5" />
-            Stop Camera
-          </Button>
-        )}
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {error}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------------------
