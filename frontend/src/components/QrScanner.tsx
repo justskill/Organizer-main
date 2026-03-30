@@ -30,8 +30,7 @@ function getTrackFromScanner(wrapper: HTMLDivElement | null): MediaStreamTrack |
   const video = wrapper.querySelector("video")
   if (!video || !video.srcObject) return null
   const stream = video.srcObject as MediaStream
-  const tracks = stream.getVideoTracks()
-  return tracks[0] ?? null
+  return stream.getVideoTracks()[0] ?? null
 }
 
 function getCapabilities(track: MediaStreamTrack): CameraCapabilities {
@@ -64,6 +63,9 @@ function getCapabilities(track: MediaStreamTrack): CameraCapabilities {
  * - Torch/flashlight toggle
  * - Zoom slider
  * - Tap-to-refocus
+ *
+ * Camera enumeration is deferred until the user starts scanning to avoid
+ * triggering a premature camera-access permission prompt.
  */
 export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
   const [scanning, setScanning] = useState(false)
@@ -72,22 +74,15 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
   const [zoom, setZoom] = useState(1)
   const [caps, setCaps] = useState<CameraCapabilities | null>(null)
   const [cameras, setCameras] = useState<{ id: string; label: string }[]>([])
-  const [activeCameraIdx, setActiveCameraIdx] = useState(0)
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null)
 
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const scanCallbackRef = useRef(onScan)
   scanCallbackRef.current = onScan
   const elementIdRef = useRef(`qr-reader-${++instanceCounter}`)
-
-  // Enumerate cameras on mount
-  useEffect(() => {
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        setCameras(devices.map((d) => ({ id: d.id, label: d.label || `Camera ${d.id.slice(0, 6)}` })))
-      })
-      .catch(() => {})
-  }, [])
+  // Guard against starting a new scanner while one is still stopping
+  const transitionRef = useRef(false)
 
   const ensureScannerDiv = useCallback(() => {
     if (!wrapperRef.current) return
@@ -119,13 +114,14 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
   }, [])
 
   const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
+    const scanner = scannerRef.current
+    scannerRef.current = null
+    if (scanner) {
       try {
-        const state = scannerRef.current.getState()
-        if (state === 2) await scannerRef.current.stop()
+        const state = scanner.getState()
+        if (state === 2) await scanner.stop()
       } catch { /* ignore */ }
-      try { scannerRef.current.clear() } catch { /* ignore */ }
-      scannerRef.current = null
+      try { scanner.clear() } catch { /* ignore */ }
     }
     removeScannerDiv()
     setScanning(false)
@@ -135,15 +131,24 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
   }, [removeScannerDiv])
 
   const startScanner = useCallback(async (cameraId?: string) => {
+    if (transitionRef.current) return
+    transitionRef.current = true
     setError(null)
+
+    // Stop any existing scanner and wait for camera to fully release
     await stopScanner()
+    await new Promise((r) => setTimeout(r, 300))
+
     ensureScannerDiv()
     try {
       const scanner = new Html5Qrcode(elementIdRef.current)
       scannerRef.current = scanner
+
+      // Always prefer environment (rear) camera when no explicit ID is given
       const cameraConfig: MediaTrackConstraints = cameraId
         ? { deviceId: { exact: cameraId } }
         : { facingMode: "environment" }
+
       await scanner.start(
         cameraConfig,
         { fps: 10, qrbox: { width: 250, height: 250 } },
@@ -157,14 +162,32 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
         () => {}
       )
       setScanning(true)
-      // Small delay to let the video element initialize
+
+      // Enumerate cameras now that we have permission (no extra prompt)
+      if (cameras.length === 0) {
+        try {
+          const devices = await Html5Qrcode.getCameras()
+          setCameras(devices.map((d) => ({ id: d.id, label: d.label || `Camera ${d.id.slice(0, 6)}` })))
+        } catch { /* ignore */ }
+      }
+
+      // Detect the active camera's device ID from the running track
+      const track = getTrackFromScanner(wrapperRef.current)
+      if (track) {
+        const settings = track.getSettings()
+        if (settings.deviceId) setActiveCameraId(settings.deviceId)
+      }
+
+      // Small delay to let the video element fully initialize before reading capabilities
       setTimeout(refreshCapabilities, 500)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not access camera. Check permissions.")
       removeScannerDiv()
       setScanning(false)
+    } finally {
+      transitionRef.current = false
     }
-  }, [stopScanner, ensureScannerDiv, removeScannerDiv, refreshCapabilities])
+  }, [stopScanner, ensureScannerDiv, removeScannerDiv, refreshCapabilities, cameras.length])
 
   // --- Camera control handlers ---
 
@@ -191,7 +214,6 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
     const track = getTrackFromScanner(wrapperRef.current)
     if (!track) return
     try {
-      // Toggle to manual then back to continuous to trigger a re-focus
       await track.applyConstraints({ advanced: [{ focusMode: "manual" } as MediaTrackConstraintSet] })
       setTimeout(async () => {
         try {
@@ -202,22 +224,25 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
   }, [])
 
   const handleSwitchCamera = useCallback(async () => {
-    if (cameras.length < 2) return
-    const nextIdx = (activeCameraIdx + 1) % cameras.length
-    setActiveCameraIdx(nextIdx)
-    await startScanner(cameras[nextIdx].id)
-  }, [cameras, activeCameraIdx, startScanner])
+    if (cameras.length < 2 || transitionRef.current) return
+    // Find the next camera that isn't the currently active one
+    const currentIdx = cameras.findIndex((c) => c.id === activeCameraId)
+    const nextIdx = (currentIdx + 1) % cameras.length
+    const nextId = cameras[nextIdx].id
+    setActiveCameraId(nextId)
+    await startScanner(nextId)
+  }, [cameras, activeCameraId, startScanner])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (scannerRef.current) {
-        const s = scannerRef.current
-        scannerRef.current = null
+      const scanner = scannerRef.current
+      scannerRef.current = null
+      if (scanner) {
         try {
-          const state = s.getState()
-          if (state === 2) s.stop().catch(() => {})
-          s.clear()
+          const state = scanner.getState()
+          if (state === 2) scanner.stop().catch(() => {})
+          scanner.clear()
         } catch { /* ignore */ }
       }
     }
@@ -299,7 +324,7 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
 
       <div className="flex justify-center">
         {!scanning ? (
-          <Button onClick={() => startScanner(cameras[activeCameraIdx]?.id)} size="sm" className="min-h-[40px]">
+          <Button onClick={() => startScanner()} size="sm" className="min-h-[40px]">
             <Camera className="mr-2 h-4 w-4" />
             Start Camera
           </Button>
