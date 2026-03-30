@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Camera, CameraOff, AlertCircle, SwitchCamera, Zap, ZapOff, ZoomIn, ZoomOut, Focus } from "lucide-react"
+import { Camera, CameraOff, AlertCircle, Zap, ZapOff, ZoomIn, ZoomOut, Focus } from "lucide-react"
 import { Html5Qrcode } from "html5-qrcode"
 import { Button } from "@/components/ui/button"
 
-/**
- * Extract a short code from a QR payload.
- * QR payload is `/scan/{SHORT_CODE}` or a full URL ending with `/scan/{code}`.
- */
 export function extractCode(raw: string): string {
   const scanMatch = raw.match(/\/scan\/([A-Za-z0-9_-]+)$/)
   if (scanMatch) return scanMatch[1]
@@ -15,7 +11,7 @@ export function extractCode(raw: string): string {
 
 let instanceCounter = 0
 
-interface CameraCapabilities {
+interface CamCaps {
   canTorch: boolean
   canZoom: boolean
   canFocus: boolean
@@ -24,225 +20,107 @@ interface CameraCapabilities {
   zoomStep: number
 }
 
-function getVideoTrack(wrapper: HTMLDivElement | null): MediaStreamTrack | null {
-  if (!wrapper) return null
-  const video = wrapper.querySelector("video")
-  if (!video || !video.srcObject) return null
+function getTrack(wrapper: HTMLDivElement | null): MediaStreamTrack | null {
+  const video = wrapper?.querySelector("video")
+  if (!video?.srcObject) return null
   return (video.srcObject as MediaStream).getVideoTracks()[0] ?? null
 }
 
-function readCapabilities(track: MediaStreamTrack): CameraCapabilities {
-  const caps: CameraCapabilities = {
-    canTorch: false, canZoom: false, canFocus: false,
-    zoomMin: 1, zoomMax: 1, zoomStep: 0.1,
-  }
-  if (!("getCapabilities" in track)) return caps
+function detectCaps(track: MediaStreamTrack): CamCaps {
+  const c: CamCaps = { canTorch: false, canZoom: false, canFocus: false, zoomMin: 1, zoomMax: 1, zoomStep: 0.1 }
+  if (!("getCapabilities" in track)) return c
   try {
-    const c = track.getCapabilities() as Record<string, unknown>
-    if (c.torch) caps.canTorch = true
-    if (c.zoom && typeof c.zoom === "object") {
-      const z = c.zoom as { min?: number; max?: number; step?: number }
-      caps.canZoom = true
-      caps.zoomMin = z.min ?? 1
-      caps.zoomMax = z.max ?? 1
-      caps.zoomStep = z.step ?? 0.1
+    const raw = track.getCapabilities() as Record<string, unknown>
+    if (raw.torch) c.canTorch = true
+    if (raw.zoom && typeof raw.zoom === "object") {
+      const z = raw.zoom as { min?: number; max?: number; step?: number }
+      c.canZoom = true; c.zoomMin = z.min ?? 1; c.zoomMax = z.max ?? 1; c.zoomStep = z.step ?? 0.1
     }
-    if (c.focusMode && Array.isArray(c.focusMode)) {
-      caps.canFocus = (c.focusMode as string[]).includes("continuous") ||
-                      (c.focusMode as string[]).includes("manual")
+    if (raw.focusMode && Array.isArray(raw.focusMode)) {
+      c.canFocus = (raw.focusMode as string[]).some((m) => m === "continuous" || m === "manual")
     }
   } catch { /* unsupported */ }
-  return caps
+  return c
 }
 
-/**
- * Fully stop an Html5Qrcode instance and release its camera.
- * Returns only after the camera stream is released.
- */
-async function fullyStopScanner(scanner: Html5Qrcode | null): Promise<void> {
-  if (!scanner) return
-  try {
-    const state = scanner.getState()
-    if (state === 2) await scanner.stop()
-  } catch { /* ignore */ }
-  try { scanner.clear() } catch { /* ignore */ }
-}
-
-/**
- * QR/barcode scanner with camera controls.
- *
- * Camera switching uses native MediaStream track replacement instead of
- * tearing down and recreating the html5-qrcode scanner, which avoids the
- * lock-up that occurs when rapidly cycling cameras.
- */
 export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [torch, setTorch] = useState(false)
   const [zoom, setZoom] = useState(1)
-  const [caps, setCaps] = useState<CameraCapabilities | null>(null)
-  const [cameras, setCameras] = useState<{ id: string; label: string }[]>([])
-  const [activeCameraId, setActiveCameraId] = useState<string | null>(null)
-  const [switching, setSwitching] = useState(false)
+  const [caps, setCaps] = useState<CamCaps | null>(null)
 
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const scanCallbackRef = useRef(onScan)
-  scanCallbackRef.current = onScan
-  const elementIdRef = useRef(`qr-reader-${++instanceCounter}`)
+  const onScanRef = useRef(onScan)
+  onScanRef.current = onScan
+  const elId = useRef(`qr-${++instanceCounter}`)
 
-  const ensureScannerDiv = useCallback(() => {
+  const addDiv = useCallback(() => {
     if (!wrapperRef.current) return
-    const id = elementIdRef.current
-    let el = wrapperRef.current.querySelector(`#${id}`) as HTMLDivElement | null
-    if (!el) {
-      el = document.createElement("div")
-      el.id = id
-      wrapperRef.current.appendChild(el)
+    if (!wrapperRef.current.querySelector(`#${elId.current}`)) {
+      const d = document.createElement("div")
+      d.id = elId.current
+      wrapperRef.current.appendChild(d)
     }
   }, [])
 
-  const removeScannerDiv = useCallback(() => {
-    if (!wrapperRef.current) return
-    const el = wrapperRef.current.querySelector(`#${elementIdRef.current}`)
+  const removeDiv = useCallback(() => {
+    const el = wrapperRef.current?.querySelector(`#${elId.current}`)
     if (el) { el.innerHTML = ""; el.remove() }
   }, [])
 
-  const updateCaps = useCallback(() => {
-    const track = getVideoTrack(wrapperRef.current)
-    if (track) {
-      const c = readCapabilities(track)
-      setCaps(c)
-      setZoom(c.zoomMin)
-      const settings = track.getSettings()
-      if (settings.deviceId) setActiveCameraId(settings.deviceId)
-    }
-  }, [])
-
-  const stopScanner = useCallback(async () => {
-    const scanner = scannerRef.current
+  const stop = useCallback(async () => {
+    const s = scannerRef.current
     scannerRef.current = null
-    await fullyStopScanner(scanner)
-    removeScannerDiv()
+    if (s) {
+      try { if (s.getState() === 2) await s.stop() } catch { /* ok */ }
+      try { s.clear() } catch { /* ok */ }
+    }
+    removeDiv()
     setScanning(false)
     setTorch(false)
     setCaps(null)
     setZoom(1)
-  }, [removeScannerDiv])
+  }, [removeDiv])
 
-  const startScanner = useCallback(async () => {
+  const handleStart = useCallback(async () => {
     setError(null)
-    await stopScanner()
-    ensureScannerDiv()
+    await stop()
+    addDiv()
     try {
-      const scanner = new Html5Qrcode(elementIdRef.current)
+      const scanner = new Html5Qrcode(elId.current)
       scannerRef.current = scanner
+
       await scanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          const code = extractCode(decodedText)
-          if (code) {
-            scanCallbackRef.current(code)
-            stopScanner()
-          }
+        (decoded) => {
+          const code = extractCode(decoded)
+          if (code) { onScanRef.current(code); stop() }
         },
         () => {}
       )
       setScanning(true)
 
-      // Enumerate cameras now that we have permission
-      try {
-        const devices = await Html5Qrcode.getCameras()
-        setCameras(devices.map((d) => ({
-          id: d.id,
-          label: d.label || `Camera ${d.id.slice(0, 6)}`,
-        })))
-      } catch { /* ignore */ }
-
-      setTimeout(updateCaps, 500)
+      // Read capabilities after video initializes
+      setTimeout(() => {
+        const track = getTrack(wrapperRef.current)
+        if (track) {
+          setCaps(detectCaps(track))
+          setZoom(1)
+        }
+      }, 400)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not access camera. Check permissions.")
-      removeScannerDiv()
+      setError(err instanceof Error ? err.message : "Could not access camera.")
+      removeDiv()
       setScanning(false)
     }
-  }, [stopScanner, ensureScannerDiv, removeScannerDiv, updateCaps])
+  }, [stop, addDiv, removeDiv])
 
-  /**
-   * Switch camera by replacing the video track on the existing MediaStream.
-   * This avoids tearing down html5-qrcode entirely, which prevents lock-ups.
-   */
-  const handleSwitchCamera = useCallback(async () => {
-    if (cameras.length < 2 || switching) return
-    setSwitching(true)
-    try {
-      const currentIdx = cameras.findIndex((c) => c.id === activeCameraId)
-      const nextIdx = (currentIdx + 1) % cameras.length
-      const nextId = cameras[nextIdx].id
-
-      const video = wrapperRef.current?.querySelector("video")
-      if (!video || !video.srcObject) return
-
-      const oldStream = video.srcObject as MediaStream
-      const oldTrack = oldStream.getVideoTracks()[0]
-
-      // Acquire a new stream for the target camera
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: nextId } },
-      })
-      const newTrack = newStream.getVideoTracks()[0]
-
-      // Replace the track on the existing stream so html5-qrcode keeps scanning
-      if (oldTrack) {
-        oldStream.removeTrack(oldTrack)
-        oldTrack.stop()
-      }
-      oldStream.addTrack(newTrack)
-
-      // Point the video element at the (now-updated) stream
-      video.srcObject = oldStream
-
-      setActiveCameraId(nextId)
-      setTorch(false)
-      setTimeout(updateCaps, 300)
-    } catch (err) {
-      // If track replacement fails, fall back to full restart with the next camera
-      try {
-        const currentIdx = cameras.findIndex((c) => c.id === activeCameraId)
-        const nextIdx = (currentIdx + 1) % cameras.length
-        const nextId = cameras[nextIdx].id
-
-        await stopScanner()
-        await new Promise((r) => setTimeout(r, 400))
-        ensureScannerDiv()
-
-        const scanner = new Html5Qrcode(elementIdRef.current)
-        scannerRef.current = scanner
-        await scanner.start(
-          { deviceId: { exact: nextId } },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            const code = extractCode(decodedText)
-            if (code) {
-              scanCallbackRef.current(code)
-              stopScanner()
-            }
-          },
-          () => {}
-        )
-        setScanning(true)
-        setActiveCameraId(nextId)
-        setTimeout(updateCaps, 500)
-      } catch {
-        setError("Failed to switch camera. Try stopping and restarting.")
-      }
-    } finally {
-      setSwitching(false)
-    }
-  }, [cameras, activeCameraId, switching, updateCaps, stopScanner, ensureScannerDiv])
-
-  const handleToggleTorch = useCallback(async () => {
-    const track = getVideoTrack(wrapperRef.current)
+  // --- Torch ---
+  const handleTorch = useCallback(async () => {
+    const track = getTrack(wrapperRef.current)
     if (!track) return
     const next = !torch
     try {
@@ -251,24 +129,26 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
     } catch { /* unsupported */ }
   }, [torch])
 
-  const handleZoomChange = useCallback(async (newZoom: number) => {
-    const track = getVideoTrack(wrapperRef.current)
+  // --- Zoom ---
+  const handleZoom = useCallback(async (val: number) => {
+    const track = getTrack(wrapperRef.current)
     if (!track) return
     try {
-      await track.applyConstraints({ advanced: [{ zoom: newZoom } as MediaTrackConstraintSet] })
-      setZoom(newZoom)
+      await track.applyConstraints({ advanced: [{ zoom: val } as MediaTrackConstraintSet] })
+      setZoom(val)
     } catch { /* unsupported */ }
   }, [])
 
+  // --- Refocus ---
   const handleRefocus = useCallback(async () => {
-    const track = getVideoTrack(wrapperRef.current)
+    const track = getTrack(wrapperRef.current)
     if (!track) return
     try {
       await track.applyConstraints({ advanced: [{ focusMode: "manual" } as MediaTrackConstraintSet] })
       setTimeout(async () => {
         try {
           await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] })
-        } catch { /* ignore */ }
+        } catch { /* ok */ }
       }, 100)
     } catch { /* unsupported */ }
   }, [])
@@ -276,12 +156,14 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      fullyStopScanner(scannerRef.current)
+      const s = scannerRef.current
       scannerRef.current = null
+      if (s) {
+        try { if (s.getState() === 2) s.stop().catch(() => {}) } catch { /* ok */ }
+        try { s.clear() } catch { /* ok */ }
+      }
     }
   }, [])
-
-  const hasControls = caps && (caps.canTorch || caps.canZoom || caps.canFocus || cameras.length > 1)
 
   return (
     <div className="space-y-3">
@@ -306,16 +188,11 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
         )}
       </div>
 
-      {scanning && hasControls && (
+      {/* Controls toolbar — only while scanning */}
+      {scanning && caps && (caps.canTorch || caps.canZoom) && (
         <div className="flex flex-wrap items-center justify-center gap-2">
-          {cameras.length > 1 && (
-            <Button variant="outline" size="sm" className="min-h-[36px]" onClick={handleSwitchCamera} disabled={switching}>
-              <SwitchCamera className="mr-1.5 h-4 w-4" />
-              {switching ? "Switching…" : "Switch"}
-            </Button>
-          )}
           {caps.canTorch && (
-            <Button variant="outline" size="sm" className="min-h-[36px]" onClick={handleToggleTorch}>
+            <Button variant="outline" size="sm" className="min-h-[36px]" onClick={handleTorch}>
               {torch ? <ZapOff className="mr-1.5 h-4 w-4" /> : <Zap className="mr-1.5 h-4 w-4" />}
               {torch ? "Light Off" : "Light On"}
             </Button>
@@ -325,23 +202,20 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
               <Button
                 variant="outline" size="icon" className="h-8 w-8"
                 disabled={zoom <= caps.zoomMin}
-                onClick={() => handleZoomChange(Math.max(caps.zoomMin, zoom - caps.zoomStep * 5))}
+                onClick={() => handleZoom(Math.max(caps.zoomMin, zoom - caps.zoomStep * 5))}
                 aria-label="Zoom out"
               >
                 <ZoomOut className="h-4 w-4" />
               </Button>
               <input
-                type="range"
-                min={caps.zoomMin} max={caps.zoomMax} step={caps.zoomStep}
-                value={zoom}
-                onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
-                className="w-24 accent-primary"
-                aria-label="Zoom level"
+                type="range" min={caps.zoomMin} max={caps.zoomMax} step={caps.zoomStep}
+                value={zoom} onChange={(e) => handleZoom(parseFloat(e.target.value))}
+                className="w-24 accent-primary" aria-label="Zoom level"
               />
               <Button
                 variant="outline" size="icon" className="h-8 w-8"
                 disabled={zoom >= caps.zoomMax}
-                onClick={() => handleZoomChange(Math.min(caps.zoomMax, zoom + caps.zoomStep * 5))}
+                onClick={() => handleZoom(Math.min(caps.zoomMax, zoom + caps.zoomStep * 5))}
                 aria-label="Zoom in"
               >
                 <ZoomIn className="h-4 w-4" />
@@ -354,12 +228,12 @@ export function QrScanner({ onScan }: { onScan: (code: string) => void }) {
 
       <div className="flex justify-center">
         {!scanning ? (
-          <Button onClick={startScanner} size="sm" className="min-h-[40px]">
+          <Button onClick={handleStart} size="sm" className="min-h-[40px]">
             <Camera className="mr-2 h-4 w-4" />
             Start Camera
           </Button>
         ) : (
-          <Button onClick={stopScanner} variant="outline" size="sm" className="min-h-[40px]">
+          <Button onClick={stop} variant="outline" size="sm" className="min-h-[40px]">
             <CameraOff className="mr-2 h-4 w-4" />
             Stop Camera
           </Button>
