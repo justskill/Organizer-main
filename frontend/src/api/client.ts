@@ -9,6 +9,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     ...init?.headers,
   }
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    localStorage.removeItem('auth_token')
+    window.location.href = '/login'
+    throw new Error('Session expired')
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(body.detail || res.statusText)

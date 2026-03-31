@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = "change-me-in-production"
-    access_token_expire_minutes: int = 60 * 24  # 24 hours
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
     algorithm: str = "HS256"
 
     # Media storage
