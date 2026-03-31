@@ -1151,7 +1151,7 @@ function PreferencesTab() {
 // Main Settings Page
 // ---------------------------------------------------------------------------
 
-export default // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Labels Tab — label footer text stored in localStorage
 // ---------------------------------------------------------------------------
 
@@ -1227,7 +1227,7 @@ function LabelsTab() {
 // Main Settings Page
 // ---------------------------------------------------------------------------
 
-function SettingsPage() {
+export default function SettingsPage() {
   const [tab, setTab] = useState("categories")
 
   return (
